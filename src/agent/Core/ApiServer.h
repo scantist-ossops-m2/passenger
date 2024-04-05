@@ -26,6 +26,7 @@
 #ifndef _PASSENGER_CORE_API_SERVER_H_
 #define _PASSENGER_CORE_API_SERVER_H_
 
+#include <boost/json.hpp>
 #include <boost/config.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/regex.hpp>
@@ -35,7 +36,6 @@
 #include <exception>
 #include <sys/types.h>
 
-#include <jsoncpp/json.h>
 #include <modp_b64.h>
 
 #include <Core/Controller.h>
@@ -53,6 +53,7 @@
 #include <IOTools/BufferedIO.h>
 #include <IOTools/MessageIO.h>
 #include <StrIntTools/StrIntUtils.h>
+#include <system_error>
 
 namespace Passenger {
 namespace Core {
@@ -79,10 +80,10 @@ using namespace std;
  */
 class Schema: public ServerKit::HttpServerSchema {
 private:
-	static Json::Value normalizeAuthorizations(const Json::Value &effectiveValues) {
-		Json::Value updates;
+	static json::object normalizeAuthorizations(const json::object &effectiveValues) {
+		json::object updates;
 		updates["authorizations"] = ApiAccountUtils::normalizeApiAccountsJson(
-			effectiveValues["authorizations"]);
+          effectiveValues.at("authorizations"));
 		return updates;
 	}
 
@@ -94,7 +95,7 @@ public:
 
 		add("instance_dir", STRING_TYPE, OPTIONAL);
 		add("watchdog_fd_passing_password", STRING_TYPE, OPTIONAL | SECRET);
-		add("authorizations", ARRAY_TYPE, OPTIONAL | SECRET, Json::arrayValue);
+		add("authorizations", ARRAY_TYPE, OPTIONAL | SECRET, json::array());
 
 		addValidator(boost::bind(ApiAccountUtils::validateAuthorizationsField,
 			"authorizations", boost::placeholders::_1, boost::placeholders::_2));
@@ -113,10 +114,10 @@ struct ConfigChangeRequest {
 class Request: public ServerKit::BaseHttpRequest {
 public:
 	string body;
-	Json::Value jsonBody;
+	json::value jsonBody;
 	Authorization authorization;
 	unsigned int controllerStatesGathered;
-	vector<Json::Value> controllerStates;
+	vector<json::value> controllerStates;
 
 	DEFINE_SERVER_KIT_BASE_HTTP_REQUEST_FOOTER(Passenger::Core::ApiServer::Request);
 };
@@ -186,8 +187,8 @@ private:
 			processConfig(client, req);
 		} else if (path == P_STATIC_STRING("/reinherit_logs.json")) {
 			apiServerProcessReinheritLogs(this, client, req,
-				config["instance_dir"].asString(),
-				config["watchdog_fd_passing_password"].asString());
+				config["instance_dir"].as_string(),
+				config["watchdog_fd_passing_password"].as_string());
 		} else if (path == P_STATIC_STRING("/reopen_logs.json")) {
 			apiServerProcessReopenLogs(this, client, req);
 		} else {
@@ -238,13 +239,13 @@ private:
 	void gatherControllerState(Client *client, Request *req,
 		Controller *controller, unsigned int i)
 	{
-		Json::Value state = controller->inspectStateAsJson();
+		json::value state = controller->inspectStateAsJson();
 		getContext()->libev->runLater(boost::bind(&ApiServer::controllerStateGathered,
 			this, client, req, i, state));
 	}
 
 	void controllerStateGathered(Client *client, Request *req,
-		unsigned int i, Json::Value state)
+		unsigned int i, json::value state)
 	{
 		if (req->ended()) {
 			unrefRequest(req, __FILE__, __LINE__);
@@ -258,8 +259,8 @@ private:
 			HeaderTable headers;
 			headers.insert(req->pool, "Content-Type", "application/json");
 
-			Json::Value response;
-			response["threads"] = (Json::UInt) controllers.size();
+			json::object response;
+			response["threads"] = (uint64_t) controllers.size();
 
 			for (unsigned int i = 0; i < controllers.size(); i++) {
 				string key = "thread" + toString(i + 1);
@@ -267,7 +268,7 @@ private:
 			}
 
 			writeSimpleResponse(client, 200, &headers,
-				psg_pstrdup(req->pool, response.toStyledString()));
+								psg_pstrdup(req->pool, json::serialize(response)));
 			if (!req->ended()) {
 				Request *req2 = req;
 				endRequest(&client, &req2);
@@ -405,7 +406,8 @@ private:
 	}
 
 	void processPoolRestartAppGroupBody(Client *client, Request *req) {
-		if (!req->jsonBody.isMember("name")) {
+		json::object &body = req->jsonBody.get_object();
+		if (!body.contains("name")) {
 			endAsBadRequest(&client, &req, "Name required");
 			return;
 		}
@@ -413,8 +415,8 @@ private:
 		ApplicationPool2::Pool::RestartOptions options;
 		options.uid = req->authorization.uid;
 		options.apiKey = req->authorization.apiKey;
-		if (req->jsonBody.isMember("restart_method")) {
-			string restartMethodString = req->jsonBody["restart_method"].asString();
+		if (body.contains("restart_method")) {
+			json::string &restartMethodString = body["restart_method"].as_string();
 			if (restartMethodString == "blocking") {
 				options.method = RM_BLOCKING;
 			} else if (restartMethodString == "rolling") {
@@ -428,7 +430,7 @@ private:
 		bool result;
 		const char *response;
 		try {
-			result = appPool->restartGroupByName(req->jsonBody["name"].asString(),
+			result = appPool->restartGroupByName(body["name"].as_string(),
 				options);
 		} catch (const SecurityException &) {
 			apiServerRespondWith401(this, client, req);
@@ -467,8 +469,8 @@ private:
 	}
 
 	void processPoolDetachProcessBody(Client *client, Request *req) {
-		if (req->jsonBody.isMember("pid")) {
-			pid_t pid = (pid_t) req->jsonBody["pid"].asUInt();
+		if (req->jsonBody.get_object().contains("pid")) {
+			pid_t pid = (pid_t) req->jsonBody.at("pid").as_uint64();
 			ApplicationPool2::Pool::AuthenticationOptions options;
 			options.uid = req->authorization.uid;
 			options.apiKey = req->authorization.apiKey;
@@ -539,7 +541,7 @@ private:
 			HeaderTable headers;
 			headers.insert(req->pool, "Content-Type", "application/json");
 			writeSimpleResponse(client, 200, &headers,
-				psg_pstrdup(req->pool, Core::inspectConfig().toStyledString()));
+				psg_pstrdup(req->pool, json::serialize(Core::inspectConfig())));
 			if (!req->ended()) {
 				endRequest(&client, &req);
 			}
@@ -667,8 +669,9 @@ protected:
 			}
 		} else if (errcode == 0) {
 			// EOF
-			Json::Reader reader;
-			if (reader.parse(req->body, req->jsonBody)) {
+			error_code ec;
+			req->jsonBody = json::parse(req->body);
+			if (!ec) {
 				StaticString path = req->getPathWithoutQueryString();
 				try {
 					if (path == P_STATIC_STRING("/pool/restart_app_group.json")) {
@@ -688,7 +691,7 @@ protected:
 					}
 				}
 			} else {
-				apiServerRespondWith422(this, client, req, reader.getFormattedErrorMessages());
+				apiServerRespondWith422(this, client, req, ec.message());
 			}
 		} else {
 			// Error
@@ -704,8 +707,8 @@ protected:
 
 	virtual void deinitializeRequest(Client *client, Request *req) {
 		req->body.clear();
-		if (!req->jsonBody.isNull()) {
-			req->jsonBody = Json::Value();
+		if (!req->jsonBody.is_null()) {
+			req->jsonBody = json::value();
 		}
 		req->authorization = Authorization();
 		req->controllerStates.clear();
@@ -721,7 +724,7 @@ public:
 	EventFd *exitEvent;
 
 	ApiServer(ServerKit::Context *context, const Schema &schema,
-		const Json::Value &initialConfig,
+		const json::value &initialConfig,
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: ParentClass(context, schema, initialConfig, translator),
 		  serverConnectionPath("^/server/(.+)\\.json$"),
@@ -767,7 +770,7 @@ public:
 	}
 
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
 	{
 		if (ParentClass::prepareConfigChange(updates, errors, req.forParent)) {

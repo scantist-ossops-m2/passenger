@@ -67,7 +67,7 @@ namespace tut {
 			stdinFd = createPipe(__FILE__, __LINE__);
 			stdoutAndErrFd = createPipe(__FILE__, __LINE__);
 
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["app_output_log_level"] = "debug";
@@ -80,7 +80,7 @@ namespace tut {
 		}
 
 		~Core_ApplicationPool_ProcessTest() {
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["level"] = DEFAULT_LOG_LEVEL_NAME;
@@ -93,9 +93,9 @@ namespace tut {
 			}
 		}
 
-		ProcessPtr createProcess(const Json::Value &extraArgs = Json::Value()) {
+		ProcessPtr createProcess(const json::value &extraArgs = json::value()) {
 			SpawningKit::Result result;
-			Json::Value args = extraArgs;
+			json::value args = extraArgs;
 			vector<StaticString> internalFieldErrors;
 			vector<StaticString> appSuppliedFieldErrors;
 
@@ -207,7 +207,7 @@ namespace tut {
 			"Process object has been destroyed");
 
 		TempDir temp("tmp.log");
-		Json::Value extraArgs;
+		json::value extraArgs;
 		extraArgs["log_file"] = "tmp.log/file";
 		fclose(fopen("tmp.log/file", "w"));
 

@@ -47,7 +47,7 @@ class DummySpawner: public Spawner {
 private:
 	boost::atomic<unsigned int> count;
 
-	void setConfigFromAppPoolOptions(Config *config, Json::Value &extraArgs,
+	void setConfigFromAppPoolOptions(Config *config, json::value &extraArgs,
 		const AppPoolOptions &options)
 	{
 		Spawner::setConfigFromAppPoolOptions(config, extraArgs, options);
@@ -72,7 +72,7 @@ public:
 		}
 
 		Config config;
-		Json::Value extraArgs;
+		json::value extraArgs;
 		setConfigFromAppPoolOptions(&config, extraArgs, options);
 
 		unsigned int number = count.fetch_add(1, boost::memory_order_relaxed);

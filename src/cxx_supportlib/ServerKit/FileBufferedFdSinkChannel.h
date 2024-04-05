@@ -259,7 +259,7 @@ public:
 		FileBufferedChannel::setDataFlushedCallback(callback);
 	}
 
-	Json::Value inspectAsJson() const {
+	json::value inspectAsJson() const {
 		return FileBufferedChannel::inspectAsJson();
 	}
 };

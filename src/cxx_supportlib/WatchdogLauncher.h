@@ -76,7 +76,7 @@ void        psg_watchdog_launcher_free(PsgWatchdogLauncher *launcher);
 
 #include <signal.h>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <Constants.h>
 #include <FileDescriptor.h>
@@ -310,7 +310,7 @@ public:
 	 * @throws RuntimeException Something went wrong.
 	 */
 	void start(const string &passengerRoot,
-		const Json::Value &extraConfig = Json::Value(),
+		const json::value &extraConfig = json::value(),
 		const boost::function<void ()> &afterFork = boost::function<void ()>())
 	{
 		TRACE_POINT();
@@ -327,16 +327,16 @@ public:
 		SocketPair fds;
 		int e;
 		pid_t pid;
-		Json::Value::const_iterator it;
+		json::object::const_iterator it;
 
-		Json::Value config;
+		json::object config;
 		config["web_server_control_process_pid"] = getpid();
 		config["integration_mode"] = getIntegrationModeString();
 		config["passenger_root"] = passengerRoot;
 		config["log_level"] = (int) LoggingKit::getLevel();
 
-		for (it = extraConfig.begin(); it != extraConfig.end(); it++) {
-			config[it.name()] = *it;
+		for (it = extraConfig.get_object().begin(); it != extraConfig.get_object().end(); it++) {
+			config[it->key()] = it->value();
 		}
 
 		fds = createUnixSocketPair(__FILE__, __LINE__);
@@ -413,7 +413,7 @@ public:
 			 * reading the arguments. We'll notice that later.
 			 */
 			try {
-				writeScalarMessage(feedbackFd, config.toStyledString());
+				writeScalarMessage(feedbackFd, json::serialize(config));
 			} catch (const SystemException &e) {
 				if (e.code() != EPIPE && e.code() != ECONNRESET) {
 					inspectWatchdogCrashReason(pid);
@@ -473,20 +473,20 @@ public:
 					inspectWatchdogCrashReason(pid);
 				}
 
-				Json::Value doc;
-				Json::Reader reader;
-				if (!reader.parse(jsonData, doc)) {
+				json::object doc;
+				error_code ec;
+				json::value result = json::parse(jsonData, ec);
+				if (ec) {
 					throw RuntimeException("Unable to start the " PROGRAM_NAME " watchdog: "
 						"unable to parse its startup information report as valid JSON: "
-						+ reader.getFormattedErrorMessages() + "\n"
-						"Raw data: \"" + cEscapeString(jsonData) + "\"");
+						+ ec.message() + "\nRaw data: \"" + cEscapeString(jsonData) + "\"");
 				}
 
 				mPid               = pid;
 				this->feedbackFd   = feedbackFd;
-				mCoreAddress       = doc["core_address"].asString();
-				mCorePassword      = doc["core_password"].asString();
-				mInstanceDir       = doc["instance_dir"].asString();
+				mCoreAddress       = doc["core_address"].as_string().data();
+				mCorePassword      = doc["core_password"].as_string().data();
+				mInstanceDir       = doc["instance_dir"].as_string().data();
 				guard.clear();
 			} else if (args[0] == "Watchdog startup error") {
 				killProcessGroupAndWait(&pid, 5000);

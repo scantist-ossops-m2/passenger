@@ -12,7 +12,7 @@ namespace tut {
 		ConfigKit::Schema subschema;
 		ConfigKit::TableTranslator translator;
 		ConfigKit::DummyTranslator dummyTranslator;
-		Json::Value doc;
+		json::value doc;
 		vector<ConfigKit::Error> errors;
 	};
 
@@ -28,7 +28,7 @@ namespace tut {
 		schema.addSubSchema(subschema, dummyTranslator);
 		schema.finalize();
 
-		Json::Value desc = schema.inspect();
+		json::value desc = schema.inspect();
 		ensure(desc.isMember("name"));
 		ensure(desc.isMember("gender"));
 	}
@@ -44,7 +44,7 @@ namespace tut {
 		schema.addSubSchema(subschema, translator);
 		schema.finalize();
 
-		Json::Value desc = schema.inspect();
+		json::value desc = schema.inspect();
 		ensure(desc.isMember("sub_gender"));
 		ensure(!desc.isMember("gender"));
 	}
@@ -65,7 +65,7 @@ namespace tut {
 		ensure_equals(errors[0].getMessage(), "'sub_gender' is required");
 	}
 
-	static Json::Value inferDefaultValueForGender(const ConfigKit::Store &config) {
+	static json::value inferDefaultValueForGender(const ConfigKit::Store &config) {
 		return config["default_gender"];
 	}
 
@@ -131,8 +131,8 @@ namespace tut {
 		ensure_equals(errors[0].getMessage(), "sub_gender must be male or female");
 	}
 
-	static Json::Value normalizeTargetAndLevel(const Json::Value &values) {
-		Json::Value updates(Json::objectValue);
+	static json::value normalizeTargetAndLevel(const json::value &values) {
+		json::value updates(json::object);
 
 		if (values["target"].isString()) {
 			updates["target"]["path"] = values["target"];
@@ -160,7 +160,7 @@ namespace tut {
 		ensure_equals(config["sub_target"]["path"].asString(), "/path");
 	}
 
-	static Json::Value addExclamationFilter(const Json::Value &val) {
+	static json::value addExclamationFilter(const json::value &val) {
 		return val.asString() + "!";
 	}
 

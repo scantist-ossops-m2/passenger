@@ -45,14 +45,14 @@ struct CallbackTypes {
 		boost::function<void (typename Component::ConfigChangeRequest &req)>
 		CommitConfigChange;
 	typedef
-		boost::function<void (const Json::Value &config)>
+		boost::function<void (const json::value &config)>
 		InspectConfig;
 };
 
 
 template<typename Component>
 inline void
-callPrepareConfigChangeAndCallback(Component *component, Json::Value updates,
+callPrepareConfigChangeAndCallback(Component *component, json::value updates,
 	typename Component::ConfigChangeRequest *req,
 	const typename CallbackTypes<Component>::PrepareConfigChange &callback)
 {

@@ -34,7 +34,7 @@
 #include <boost/thread.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <oxt/macros.hpp>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <Exceptions.h>
 #include <SystemTools/SystemTime.h>
 
@@ -71,7 +71,7 @@ inline void _sendToMessageBox(const MessageBoxPtr &messageBox, const MessagePtr 
 
 struct Message {
 	string name;
-	Json::Value args;
+	json::value args;
 	boost::weak_ptr<MessageBox> from;
 	void *data;
 	void (*freeData)(void *p);

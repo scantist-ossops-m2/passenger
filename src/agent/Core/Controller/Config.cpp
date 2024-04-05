@@ -39,7 +39,7 @@ using namespace std;
 
 
 bool
-Controller::prepareConfigChange(const Json::Value &updates,
+Controller::prepareConfigChange(const json::value &updates,
 	vector<ConfigKit::Error> &errors,
 	ControllerConfigChangeRequest &req)
 {

@@ -34,9 +34,10 @@
 #include <JsonTools/Autocast.h>
 #include <Utils.h>
 #include <Utils/OptionParsing.h>
+#include <IOTools/IOUtils.h>
 #include <StrIntTools/StrIntUtils.h>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 namespace Passenger {
 
@@ -224,7 +225,7 @@ coreUsage() {
 }
 
 inline bool
-parseCoreOption(int argc, const char *argv[], int &i, Json::Value &updates) {
+parseCoreOption(int argc, const char *argv[], int &i, json::object &updates) {
 	OptionParser p(coreUsage);
 
 	if (p.isValueFlag(argc, i, argv[i], '\0', "--passenger-root")) {
@@ -232,13 +233,13 @@ parseCoreOption(int argc, const char *argv[], int &i, Json::Value &updates) {
 		i += 2;
 	} else if (p.isValueFlag(argc, i, argv[i], 'l', "--listen")) {
 		if (getSocketAddressType(argv[i + 1]) != SAT_UNKNOWN) {
-			Json::Value &addresses = updates["controller_addresses"];
+			json::array &addresses = updates["controller_addresses"].get_array();
 			if (addresses.size() == SERVER_KIT_MAX_SERVER_ENDPOINTS) {
 				fprintf(stderr, "ERROR: you may specify up to %u --listen addresses.\n",
 					SERVER_KIT_MAX_SERVER_ENDPOINTS);
 				exit(1);
 			}
-			addresses.append(argv[i + 1]);
+			addresses.push_back(argv[i + 1]);
 			i += 2;
 		} else {
 			fprintf(stderr, "ERROR: invalid address format for --listen. The address "
@@ -248,13 +249,13 @@ parseCoreOption(int argc, const char *argv[], int &i, Json::Value &updates) {
 		}
 	} else if (p.isValueFlag(argc, i, argv[i], '\0', "--api-listen")) {
 		if (getSocketAddressType(argv[i + 1]) != SAT_UNKNOWN) {
-			Json::Value &addresses = updates["api_server_addresses"];
+			json::array &addresses = updates["api_server_addresses"].get_array();
 			if (addresses.size() == SERVER_KIT_MAX_SERVER_ENDPOINTS) {
 				fprintf(stderr, "ERROR: you may specify up to %u --api-listen addresses.\n",
 					SERVER_KIT_MAX_SERVER_ENDPOINTS);
 				exit(1);
 			}
-			addresses.append(argv[i + 1]);
+			addresses.push_back(argv[i + 1]);
 			i += 2;
 		} else {
 			fprintf(stderr, "ERROR: invalid address format for --api-listen. The address "
@@ -274,7 +275,7 @@ parseCoreOption(int argc, const char *argv[], int &i, Json::Value &updates) {
 			exit(1);
 		}
 
-		updates["api_server_authorizations"].append(argv[i + 1]);
+		updates["api_server_authorizations"].get_array().push_back(argv[i + 1]);
 		i += 2;
 	} else if (p.isValueFlag(argc, i, argv[i], '\0', "--socket-backlog")) {
 		updates["controller_socket_backlog"] = argv[i + 1];
@@ -431,7 +432,7 @@ parseCoreOption(int argc, const char *argv[], int &i, Json::Value &updates) {
 		updates[name] = autocastValueToJson(value);
 		i += 2;
 	} else if (!startsWith(argv[i], "-")) {
-		if (!updates.isMember("single_app_mode_app_root")) {
+		if (!updates.contains("single_app_mode_app_root")) {
 			updates["single_app_mode_app_root"] = argv[i];
 			i++;
 		} else {

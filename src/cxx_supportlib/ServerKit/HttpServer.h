@@ -100,7 +100,7 @@ struct HttpServerConfigRealization {
 	unsigned int requestFreelistLimit;
 
 	HttpServerConfigRealization(const ConfigKit::Store &config)
-		: requestFreelistLimit(config["request_freelist_limit"].asUInt())
+		: requestFreelistLimit(config["request_freelist_limit"].as_uint64())
 		{ }
 
 	void swap(HttpServerConfigRealization &other) BOOST_NOEXCEPT_OR_NOTHROW {
@@ -1006,9 +1006,9 @@ protected:
 
 public:
 	HttpServer(Context *context, const HttpServerSchema &schema,
-		const Json::Value &initialConfig = Json::Value(),
+		const json::value &initialConfig = json::value(),
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
-		: ParentClass(context, schema, initialConfig, translator),
+		: ParentClass(context, schema, initialConfig.get_object(), translator),
 		  freeRequestCount(0),
 		  totalRequestsBegun(0),
 		  lastTotalRequestsBegun(0),
@@ -1259,7 +1259,7 @@ public:
 
 	/***** Configuration and introspection *****/
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors, HttpServerConfigChangeRequest &req)
 	{
 		if (ParentClass::prepareConfigChange(updates, errors, req.forParent)) {
@@ -1275,21 +1275,24 @@ public:
 		configRlz.swap(*req.configRlz);
 	}
 
-	virtual Json::Value inspectStateAsJson() const {
-		Json::Value doc = ParentClass::inspectStateAsJson();
+	virtual json::value inspectStateAsJson() const {
+		json::value vdoc = ParentClass::inspectStateAsJson();
+		json::object &doc = vdoc.get_object();
 		doc["free_request_count"] = freeRequestCount;
-		doc["total_requests_begun"] = (Json::UInt64) totalRequestsBegun;
-		doc["request_begin_speed"]["1m"] = averageSpeedToJson(
+		doc["total_requests_begun"] = (uint64_t) totalRequestsBegun;
+		json::object &rbs_doc = doc["request_begin_speed"].get_object();
+		rbs_doc["1m"] = averageSpeedToJson(
 			capFloatPrecision(requestBeginSpeed1m * 60),
 			"minute", "1 minute", -1);
-		doc["request_begin_speed"]["1h"] = averageSpeedToJson(
+		rbs_doc["1h"] = averageSpeedToJson(
 			capFloatPrecision(requestBeginSpeed1h * 60),
 			"minute", "1 hour", -1);
 		return doc;
 	}
 
-	virtual Json::Value inspectClientStateAsJson(const Client *client) const {
-		Json::Value doc = ParentClass::inspectClientStateAsJson(client);
+	virtual json::value inspectClientStateAsJson(const Client *client) const {
+		json::value vdoc = ParentClass::inspectClientStateAsJson(client);
+		json::object &doc = vdoc.get_object();
 		if (client->currentRequest) {
 			doc["current_request"] = inspectRequestStateAsJson(client->currentRequest);
 		}
@@ -1298,8 +1301,8 @@ public:
 		return doc;
 	}
 
-	virtual Json::Value inspectRequestStateAsJson(const Request *req) const {
-		Json::Value doc(Json::objectValue);
+	virtual json::value inspectRequestStateAsJson(const Request *req) const {
+		json::object doc;
 		assert(req->httpState != Request::IN_FREELIST);
 		const LString::Part *part;
 
@@ -1315,17 +1318,17 @@ public:
 			doc["want_keep_alive"] = req->wantKeepAlive;
 			doc["request_body_type"] = req->getBodyTypeString();
 			doc["request_body_fully_read"] = req->bodyFullyRead();
-			doc["request_body_already_read"] = (Json::Value::UInt64) req->bodyAlreadyRead;
+			doc["request_body_already_read"] = (uint64_t) req->bodyAlreadyRead;
 			doc["response_begun"] = req->responseBegun;
 			doc["last_data_receive_time"] = evTimeToJson(req->lastDataReceiveTime, evNow, now);
 			doc["last_data_send_time"] = evTimeToJson(req->lastDataSendTime, evNow, now);
 			doc["method"] = http_method_str(req->method);
 			if (req->httpState != Request::ERROR) {
 				if (req->bodyType == Request::RBT_CONTENT_LENGTH) {
-					doc["content_length"] = (Json::Value::UInt64)
+					doc["content_length"] = (uint64_t)
 						req->aux.bodyInfo.contentLength;
 				} else if (req->bodyType == Request::RBT_CHUNKED) {
-					doc["end_chunk_reached"] = (Json::Value::UInt64)
+					doc["end_chunk_reached"] = (uint64_t)
 						req->aux.bodyInfo.endChunkReached;
 				}
 			} else {

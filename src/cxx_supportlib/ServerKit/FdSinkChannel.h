@@ -30,7 +30,7 @@
 #include <cerrno>
 #include <unistd.h>
 #include <ev.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <ServerKit/Channel.h>
 
 namespace Passenger {
@@ -203,11 +203,12 @@ public:
 		this->hooks = hooks;
 	}
 
-	Json::Value inspectAsJson() const {
-		Json::Value doc = Channel::inspectAsJson();
+	json::value inspectAsJson() const {
+		json::value vdoc = Channel::inspectAsJson();
+		json::object &doc = vdoc.get_object();
 		doc["initialized"] = watcher.fd != -1;
 		doc["io_watcher_active"] = (bool) watcher.active;
-		return doc;
+		return vdoc;
 	}
 };
 

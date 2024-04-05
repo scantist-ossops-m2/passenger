@@ -166,7 +166,7 @@ postprocessConfig(server_rec *s, apr_pool_t *pool, apr_pool_t *temp_pool) {
 			fprintf(stderr, "Error opening %s for writing\n",
 				serverConfig.dumpConfigManifest.c_str());
 		} else {
-			string dumpContent = serverConfig.manifest.toStyledString();
+			string dumpContent = json::serialize(serverConfig.manifest);
 			size_t ret = fwrite(dumpContent.data(), 1, dumpContent.size(), f);
 			(void) ret; // Ignore compilation warning.
 			fclose(f);
@@ -198,9 +198,9 @@ cmd_passenger_ctl(cmd_parms *cmd, void *dummy, const char *name, const char *val
 	serverConfig.ctlSourceLine = cmd->directive->line_num;
 	serverConfig.ctlExplicitlySet = true;
 	try {
-		serverConfig.ctl[name] = autocastValueToJson(value);
+		serverConfig.ctl.at(name) = autocastValueToJson(value);
 		return NULL;
-	} catch (const Json::Reader &) {
+	} catch (const json::error_code &) {
 		return "Error parsing value as JSON";
 	}
 }

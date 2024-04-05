@@ -43,12 +43,12 @@ typedef boost::function<void (ConfigChangeRequest *req)> CommitConfigChangeCallb
 
 ConfigChangeRequest *createConfigChangeRequest();
 void freeConfigChangeRequest(ConfigChangeRequest *req);
-void asyncPrepareConfigChange(const Json::Value &updates, ConfigChangeRequest *req, const PrepareConfigChangeCallback &callback);
+void asyncPrepareConfigChange(const json::value &updates, ConfigChangeRequest *req, const PrepareConfigChangeCallback &callback);
 void asyncCommitConfigChange(ConfigChangeRequest *req, const CommitConfigChangeCallback &callback) BOOST_NOEXCEPT_OR_NOTHROW;
-Json::Value inspectConfig();
+json::value inspectConfig();
 
-Json::Value manipulateLoggingKitConfig(const ConfigKit::Store &coreConfig,
-	const Json::Value &loggingKitConfig);
+json::value manipulateLoggingKitConfig(const ConfigKit::Store &coreConfig,
+	const json::value &loggingKitConfig);
 
 
 } // namespace Core

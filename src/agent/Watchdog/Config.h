@@ -34,6 +34,8 @@
 #include <Shared/ApiAccountUtils.h>
 #include <Utils.h>
 #include <StrIntTools/StrIntUtils.h>
+#include <JsonTools/JsonUtils.h>
+#include <cstddef>
 
 namespace Passenger {
 namespace Watchdog {
@@ -211,11 +213,11 @@ private:
 		ConfigKit::TableTranslator &translator,
 		const StaticString &matchPrefix, const StaticString &addPrefix)
 	{
-		const Json::Value doc = schema.inspect();
-		Json::Value::const_iterator it, end = doc.end();
+		const json::object doc = schema.inspect();
+		json::object::const_iterator it, end = doc.end();
 		for (it = doc.begin(); it != end; it++) {
-			if (startsWith(it.name(), matchPrefix)) {
-				translator.add(addPrefix + it.name(), it.name());
+			if (startsWith(it->key(), matchPrefix)) {
+				translator.add(addPrefix + string(it->key()), it->key());
 			}
 		}
 	}
@@ -225,55 +227,55 @@ private:
 	static void addSubSchemaPrefixTranslations(ConfigKit::TableTranslator &translator,
 		const StaticString &prefix)
 	{
-		vector<string> keys = SchemaType().inspect().getMemberNames();
-		vector<string>::const_iterator it, end = keys.end();
-		for (it = keys.begin(); it != end; it++) {
-			translator.add(prefix + *it, *it);
+		json::object schema = SchemaType().inspect();
+		json::object::const_iterator it, end = schema.end();
+		for (it = schema.begin(); it != end; it++) {
+			translator.add(prefix + string(it->key()), it->key());
 		}
 	}
 
 	// Some options set their default value to this function to indicate
 	// that their actual default values cannot be inferred from a ConfigKit default
 	// value getter function. Instead they are determined inside WatchdogMain.cpp.
-	static Json::Value dummyDefaultValueGetter(const ConfigKit::Store &store) {
-		return Json::Value();
+	static json::value dummyDefaultValueGetter(const ConfigKit::Store &store) {
+		return json::value();
 	}
 
-	static Json::Value getDefaultControllerSecureHeadersPassword(const ConfigKit::Store &store) {
-		return RandomGenerator().generateAsciiString(24);
+	static json::value getDefaultControllerSecureHeadersPassword(const ConfigKit::Store &store) {
+		return json::string(RandomGenerator().generateAsciiString(24));
 	}
 
-	static Json::Value getDefaultUser(const ConfigKit::Store &store) {
-		if (store["user_switching"].asBool()) {
-			return Json::nullValue;
+	static json::value getDefaultUser(const ConfigKit::Store &store) {
+		if (store["user_switching"].as_bool()) {
+			return json::value(nullptr);
 		} else {
 			return store["default_user"];
 		}
 	}
 
-	static Json::Value getDefaultInstanceRegistryDir(const ConfigKit::Store &store) {
+	static json::value getDefaultInstanceRegistryDir(const ConfigKit::Store &store) {
 		return getSystemTempDir();
 	}
 
-	static Json::Value getDefaultSpawnDir(const ConfigKit::Store &store) {
+	static json::value getDefaultSpawnDir(const ConfigKit::Store &store) {
 		return getSystemTempDir();
 	}
 
 	static void validateAddresses(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
 		typedef ConfigKit::Error Error;
 
-		if (config["watchdog_api_server_addresses"].size() > SERVER_KIT_MAX_SERVER_ENDPOINTS) {
+		if (config["watchdog_api_server_addresses"].get_array().size() > SERVER_KIT_MAX_SERVER_ENDPOINTS) {
 			errors.push_back(Error("'{{watchdog_api_server_addresses}}' may contain at most "
 				+ toString(SERVER_KIT_MAX_SERVER_ENDPOINTS) + " items"));
 		}
 	}
 
-	static Json::Value normalizePaths(const Json::Value &effectiveValues) {
-		Json::Value updates;
-		updates["instance_registry_dir"] = absolutizePath(effectiveValues["instance_registry_dir"].asString());
-		updates["spawn_dir"] = absolutizePath(effectiveValues["spawn_dir"].asString());
-		if (!effectiveValues["watchdog_pid_file"].isNull()) {
-			updates["watchdog_pid_file"] = absolutizePath(effectiveValues["watchdog_pid_file"].asString());
+	static json::object normalizePaths(const json::object &effectiveValues) {
+		json::object updates;
+		updates["instance_registry_dir"] = absolutizePath(getJsonStaticStringField(effectiveValues,"instance_registry_dir"));
+		updates["spawn_dir"] = absolutizePath(getJsonStaticStringField(effectiveValues,"spawn_dir"));
+		if (!effectiveValues.at("watchdog_pid_file").is_null()) {
+			updates["watchdog_pid_file"] = absolutizePath(getJsonStaticStringField(effectiveValues,"watchdog_pid_file"));
 		}
 		return updates;
 	}
@@ -339,11 +341,11 @@ public:
 			OPTIONAL | SECRET | CACHE_DEFAULT_VALUE, getDefaultControllerSecureHeadersPassword);
 		add("watchdog_pid_file", STRING_TYPE, OPTIONAL | READ_ONLY);
 		add("watchdog_pid_file_autodelete", BOOL_TYPE, OPTIONAL, true);
-		add("watchdog_api_server_addresses", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, Json::arrayValue);
+		add("watchdog_api_server_addresses", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, json::array());
 		add("setsid", BOOL_TYPE, OPTIONAL, false);
 		add("daemonize", BOOL_TYPE, OPTIONAL, false);
 		add("startup_report_file", STRING_TYPE, OPTIONAL);
-		add("pidfiles_to_delete_on_exit", STRING_ARRAY_TYPE, OPTIONAL, Json::arrayValue);
+		add("pidfiles_to_delete_on_exit", STRING_ARRAY_TYPE, OPTIONAL, json::array());
 		addWithDynamicDefault("user", STRING_TYPE,
 			OPTIONAL | READ_ONLY | CACHE_DEFAULT_VALUE, getDefaultUser);
 		addWithDynamicDefault("instance_registry_dir", STRING_TYPE,

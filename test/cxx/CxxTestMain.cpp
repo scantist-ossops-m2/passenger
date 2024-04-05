@@ -20,7 +20,7 @@
 #include <Utils.h>
 #include <SystemTools/SystemTime.h>
 #include <StrIntTools/StrIntUtils.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 using namespace std;
 using namespace Passenger;
@@ -109,7 +109,7 @@ parseGroupSpec(const char *spec, string &groupName, vector<int> &testNumbers) {
 
 static void
 parseOptions(int argc, const char *argv[], ConfigKit::Store &config) {
-	Json::Value updates;
+	json::value updates;
 	char path[PATH_MAX + 1];
 	getcwd(path, PATH_MAX);
 	updates["passenger_root"] = extractDirName(path);

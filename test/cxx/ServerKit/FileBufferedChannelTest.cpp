@@ -181,21 +181,21 @@ namespace tut {
 			*result = channel.getBytesBuffered();
 		}
 
-		bool contextConfigure(const Json::Value &doc, vector<ConfigKit::Error> &errors) {
+		bool contextConfigure(const json::value &doc, vector<ConfigKit::Error> &errors) {
 			bool result;
 			bg.safe->runSync(boost::bind(&ServerKit_FileBufferedChannelTest::_contextConfigure,
 				this, &doc, &errors, &result));
 			return result;
 		}
 
-		void _contextConfigure(const Json::Value *doc, vector<ConfigKit::Error> *errors,
+		void _contextConfigure(const json::value *doc, vector<ConfigKit::Error> *errors,
 			bool *result)
 		{
 			*result = context.configure(*doc, *errors);
 		}
 
 		void channelEnableAutoStartMover(bool enabled) {
-			Json::Value doc;
+			json::value doc;
 			vector<ConfigKit::Error> errors;
 			doc["file_buffered_channel_auto_start_mover"] = enabled;
 			if (!contextConfigure(doc, errors)) {
@@ -422,7 +422,7 @@ namespace tut {
 		set_test_name("Upon feeding so much data that the threshold is passed, "
 			"it switches to the in-file mode and calls the callback later with the fed data");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -448,7 +448,7 @@ namespace tut {
 	TEST_METHOD(21) {
 		set_test_name("Any fed data is immediately passed to the callback");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		config["file_buffered_channel_delay_in_file_mode_switching"] = 50000;
@@ -473,7 +473,7 @@ namespace tut {
 			"buffered in memory, and passed to the callback when the previous callback "
 			"is done");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		config["file_buffered_channel_delay_in_file_mode_switching"] = 50000;
@@ -528,7 +528,7 @@ namespace tut {
 	TEST_METHOD(30) {
 		set_test_name("It slowly moves memory buffers to disk");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -550,7 +550,7 @@ namespace tut {
 		set_test_name("If all memory buffers have been moved to disk, then "
 			"when new data is fed, the new data is also eventually moved to disk");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -578,7 +578,7 @@ namespace tut {
 		set_test_name("If there is unread data on disk, it reads them and passes "
 			"them to the callback");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -612,7 +612,7 @@ namespace tut {
 			"next chunk from disk");
 
 		// Setup a FileBufferedChannel in the in-file mode.
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -633,9 +633,9 @@ namespace tut {
 		// Consume the initial "hello" so that the FileBufferedChannel starts
 		// reading "world" from disk. When "world" is read, we first consume
 		// "world" only, then "!" too.
-		config = Json::Value();
+		config = json::value();
 		config["file_buffered_channel_max_disk_chunk_read_size"] =
-			Json::UInt(sizeof("world") - 1);
+			uint64_t(sizeof("world") - 1);
 		ensure(contextConfigure(config, errors));
 		toConsume = CONSUME_FULLY;
 		channelConsumed(sizeof("hello") - 1, false);
@@ -655,7 +655,7 @@ namespace tut {
 			"with the next chunk from disk after the channel has become idle");
 
 		// Setup a FileBufferedChannel in the in-file mode.
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -675,9 +675,9 @@ namespace tut {
 
 		// Consume the initial "hello" so that the FileBufferedChannel starts
 		// reading "world" from disk.
-		config = Json::Value();
+		config = json::value();
 		config["file_buffered_channel_max_disk_chunk_read_size"] =
-			Json::UInt(sizeof("world") - 1);
+			uint64_t(sizeof("world") - 1);
 		ensure(contextConfigure(config, errors));
 		channelConsumed(sizeof("hello") - 1, false);
 		EVENTUALLY(5,
@@ -722,7 +722,7 @@ namespace tut {
 			"to accept further data, then the FileBufferedChannel will terminate");
 
 		// Setup a FileBufferedChannel in the in-file mode.
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -743,9 +743,9 @@ namespace tut {
 		// Consume the initial "hello" so that the FileBufferedChannel starts
 		// reading "world" from disk. When it is read, we will consume it fully
 		// while ending the channel.
-		config = Json::Value();
+		config = json::value();
 		config["file_buffered_channel_max_disk_chunk_read_size"] =
-			Json::UInt(sizeof("world") - 1);
+			uint64_t(sizeof("world") - 1);
 		ensure(contextConfigure(config, errors));
 		toConsume = CONSUME_FULLY;
 		endConsume = true;
@@ -771,7 +771,7 @@ namespace tut {
 		set_test_name("If there is no unread data on disk, it passes the next "
 			"in-memory buffer to the callback");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -822,7 +822,7 @@ namespace tut {
 		set_test_name("Upon feeding EOF, the EOF is passed to the callback after "
 			"all on-disk and in-memory data is passed");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -888,7 +888,7 @@ namespace tut {
 		set_test_name("Upon feeding an error, it switches to the error mode immediately "
 			"and it doesn't call the callback");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -927,7 +927,7 @@ namespace tut {
 	TEST_METHOD(40) {
 		set_test_name("When all on-disk and in-memory buffers have been read, it switches to in-memory mode");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		ensure(context.configure(config, errors));
@@ -975,7 +975,7 @@ namespace tut {
 		set_test_name("It calls the buffersFlushedCallback if the switching happens while "
 			"there are buffers in memory that haven't been written to disk yet");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["file_buffered_channel_threshold"] = 1;
 		config["file_buffered_channel_delay_in_file_mode_switching"] = 1000;

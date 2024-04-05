@@ -9,7 +9,7 @@ namespace tut {
 	struct ConfigKit_NestedSchemaTest: public TestBase {
 		ConfigKit::Schema schema;
 		ConfigKit::Schema nestedSchema;
-		Json::Value doc;
+		json::value doc;
 		vector<ConfigKit::Error> errors;
 
 		static bool errorSorter(const ConfigKit::Error &a, const ConfigKit::Error &b) {
@@ -137,12 +137,12 @@ namespace tut {
 		doc["people"][0]["age"] = 30;
 
 		ConfigKit::Store store(schema);
-		Json::Value preview = store.previewUpdate(doc, errors);
+		json::value preview = store.previewUpdate(doc, errors);
 		store.update(doc, errors);
 		ensure("There are no errors", errors.empty());
-		Json::Value inspection = store.inspect();
+		json::value inspection = store.inspect();
 
-		Json::Value expected;
+		json::value expected;
 		expected[0]["name"] = "123";
 		expected[0]["age"] = 30;
 		expected[0]["address"] = Json::nullValue;
@@ -152,7 +152,7 @@ namespace tut {
 		ensure_equals("Updated user value",
 			inspection["people"]["user_value"], expected);
 
-		expected = Json::Value();
+		expected = json::value();
 		expected[0]["name"] = "123";
 		expected[0]["age"] = 30;
 		expected[0]["address"] = Json::nullValue;
@@ -179,12 +179,12 @@ namespace tut {
 		doc["people"]["first"]["age"] = 30;
 
 		ConfigKit::Store store(schema);
-		Json::Value preview = store.previewUpdate(doc, errors);
+		json::value preview = store.previewUpdate(doc, errors);
 		store.update(doc, errors);
 		ensure("There are no errors", errors.empty());
-		Json::Value inspection = store.inspect();
+		json::value inspection = store.inspect();
 
-		Json::Value expected;
+		json::value expected;
 		expected["first"]["name"] = "123";
 		expected["first"]["age"] = 30;
 		expected["first"]["address"] = Json::nullValue;
@@ -194,7 +194,7 @@ namespace tut {
 		ensure_equals("Updated user value",
 			inspection["people"]["user_value"], expected);
 
-		expected = Json::Value();
+		expected = json::value();
 		expected["first"]["name"] = "123";
 		expected["first"]["age"] = 30;
 		expected["first"]["address"] = Json::nullValue;

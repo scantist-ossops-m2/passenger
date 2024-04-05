@@ -35,6 +35,7 @@
 
 #include <boost/cstdint.hpp>
 #include <boost/bind/bind.hpp>
+#include <boost/json.hpp>
 #include <oxt/thread.hpp>
 #include <oxt/backtrace.hpp>
 
@@ -47,6 +48,7 @@
 #include <ConfigKit/ConfigKit.h>
 #include <Utils/Curl.h>
 #include <StrIntTools/StrIntUtils.h>
+#include <JsonTools/JsonUtils.h>
 
 namespace Passenger {
 namespace Core {
@@ -78,16 +80,16 @@ public:
 	class Schema: public ConfigKit::Schema {
 	private:
 		static void validateProxyUrl(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
-			if (config["proxy_url"].isNull()) {
+			if (config["proxy_url"].is_null()) {
 				return;
 			}
-			if (config["proxy_url"].asString().empty()) {
+			if (config["proxy_url"].as_string().empty()) {
 				errors.push_back(ConfigKit::Error("'{{proxy_url}}', if specified, may not be empty"));
 				return;
 			}
 
 			try {
-				prepareCurlProxy(config["proxy_url"].asString());
+				prepareCurlProxy(jsonValueToString(config["proxy_url"]));
 			} catch (const ArgumentException &e) {
 				errors.push_back(ConfigKit::Error(
 					P_STATIC_STRING("'{{proxy_url}}': ")
@@ -124,9 +126,9 @@ public:
 		string caCertificatePath;
 
 		ConfigRealization(const ConfigKit::Store &config)
-			: proxyInfo(prepareCurlProxy(config["proxy_url"].asString())),
-			  url(config["url"].asString()),
-			  caCertificatePath(config["ca_certificate_path"].asString())
+			: proxyInfo(prepareCurlProxy(jsonValueToString(config["proxy_url"]))),
+			  url(jsonValueToString(config["url"])),
+			  caCertificatePath(jsonValueToString(config["ca_certificate_path"]))
 			{ }
 
 		void swap(ConfigRealization &other) BOOST_NOEXCEPT_OR_NOTHROW {
@@ -180,7 +182,7 @@ private:
 			ConfigKit::Store config(this->config);
 			l.unlock();
 
-			unsigned int backoffSec = config["first_interval"].asUInt()
+			unsigned int backoffSec = config["first_interval"].as_uint64()
 				+ calculateIntervalJitter(config);
 			P_DEBUG("Next anonymous telemetry collection in " <<
 				distanceOfTimeInWords(SystemTime::get() + backoffSec));
@@ -198,7 +200,7 @@ private:
 
 			if (backoffSec == 0) {
 				boost::unique_lock<boost::mutex> l(configSyncher);
-				backoffSec = config["interval"].asUInt()
+				backoffSec = config["interval"].as_uint64()
 					+ calculateIntervalJitter(config);
 			}
 
@@ -210,7 +212,7 @@ private:
 	}
 
 	static unsigned int calculateIntervalJitter(const ConfigKit::Store &config) {
-		unsigned int jitter = config["interval_jitter"].asUInt();
+		unsigned int jitter = config["interval_jitter"].as_uint64();
 		if (jitter == 0) {
 			return 0;
 		} else {
@@ -264,8 +266,8 @@ private:
 	}
 
 	string createRequestBody(const TelemetryData &tmData) const {
-		Json::Value doc;
-		boost::uint64_t totalRequestsHandled = 0;
+		json::object doc;
+		uint64_t totalRequestsHandled = 0;
 
 		P_ASSERT_EQ(tmData.requestsHandled.size(),
 			lastTelemetryData.requestsHandled.size());
@@ -283,10 +285,10 @@ private:
 			}
 		}
 
-		doc["requests_handled"] = (Json::UInt64) totalRequestsHandled;
-		doc["begin_time"] = (Json::UInt64) monoTimeToRealTime(
+		doc["requests_handled"] = totalRequestsHandled;
+		doc["begin_time"] = (uint64_t) monoTimeToRealTime(
 			lastTelemetryData.timestamp);
-		doc["end_time"] = (Json::UInt64) monoTimeToRealTime(
+		doc["end_time"] = (uint64_t) monoTimeToRealTime(
 			tmData.timestamp);
 		doc["version"] = PASSENGER_VERSION;
 		#ifdef PASSENGER_IS_ENTERPRISE
@@ -295,7 +297,7 @@ private:
 			doc["edition"] = "oss";
 		#endif
 
-		return doc.toStyledString();
+		return json::serialize(doc);
 	}
 
 	static time_t monoTimeToRealTime(MonotonicTimeUsec monoTime) {
@@ -327,7 +329,7 @@ private:
 		}
 
 		code = curl_easy_setopt(curl, CURLOPT_VERBOSE,
-			sessionState.config["debug_curl"].asBool() ? 1L : 0L);
+			sessionState.config["debug_curl"].as_bool() ? 1L : 0L);
 		if (code != CURLE_OK) {
 			goto error;
 		}
@@ -382,7 +384,7 @@ private:
 			}
 		}
 
-		if (sessionState.config["verify_server"].asBool()) {
+		if (sessionState.config["verify_server"].as_bool()) {
 			// These should be on by default, but make sure.
 			code = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
 			if (code != CURLE_OK) {
@@ -419,10 +421,10 @@ private:
 		// setopt failure(s) below don't abort the check.
 		if (isFinalRun) {
 			curl_easy_setopt(curl, CURLOPT_TIMEOUT,
-				sessionState.config["final_run_timeout"].asUInt());
+				sessionState.config["final_run_timeout"].as_uint64());
 		} else {
 			curl_easy_setopt(curl, CURLOPT_TIMEOUT,
-				sessionState.config["timeout"].asUInt());
+				sessionState.config["timeout"].as_uint64());
 		}
 
 		return curl;
@@ -470,44 +472,46 @@ private:
 		return code == 200 || code == 400 || code == 422 || code == 500;
 	}
 
-	static bool parseResponseBody(const string &responseData, Json::Value &jsonBody) {
-		Json::Reader reader;
-		if (reader.parse(responseData, jsonBody, false)) {
+	static bool parseResponseBody(const string &responseData, json::value &jsonBody) {
+		error_code ec;
+		jsonBody = json::parse(responseData, ec);
+		if (!ec) {
 			return true;
 		} else {
 			P_ERROR("Error in anonymous telemetry server response:"
-				" JSON response parse error: " << reader.getFormattedErrorMessages()
+				" JSON response parse error: " << ec.message()
 				<< "; data: \"" << cEscapeString(responseData) << "\"");
 			return false;
 		}
 	}
 
-	static bool validateResponseBody(const Json::Value &jsonBody) {
-		if (!jsonBody.isObject()) {
+	static bool validateResponseBody(const json::value &jsonvBody) {
+		if (!jsonvBody.is_object()) {
 			P_ERROR("Error in anonymous telemetry server response:"
 				" JSON response is not an object (data: "
-				<< stringifyJson(jsonBody) << ")");
+				<< stringifyJson(jsonvBody) << ")");
 			return false;
 		}
-		if (!jsonBody.isMember("data_processed")) {
+		const json::object &jsonBody = jsonvBody.get_object();
+		if (!jsonBody.contains("data_processed")) {
 			P_ERROR("Error in anonymous telemetry server response:"
 				" JSON response must contain a 'data_processed' field (data: "
 				<< stringifyJson(jsonBody) << ")");
 			return false;
 		}
-		if (!jsonBody["data_processed"].isBool()) {
+		if (!jsonBody.at("data_processed").is_bool()) {
 			P_ERROR("Error in anonymous telemetry server response:"
 				" 'data_processed' field must be a boolean (data: "
 				<< stringifyJson(jsonBody) << ")");
 			return false;
 		}
-		if (jsonBody.isMember("backoff") && !jsonBody["backoff"].isUInt()) {
+		if (jsonBody.contains("backoff") && !jsonBody.at("backoff").is_uint64()) {
 			P_ERROR("Error in anonymous telemetry server response:"
 				" 'backoff' field must be an unsigned integer (data: "
 				<< stringifyJson(jsonBody) << ")");
 			return false;
 		}
-		if (jsonBody.isMember("log_message") && !jsonBody["log_message"].isString()) {
+		if (jsonBody.contains("log_message") && !jsonBody.at("log_message").is_string()) {
 			P_ERROR("Error in anonymous telemetry server response:"
 				" 'log_message' field must be a string (data: "
 				<< stringifyJson(jsonBody) << ")");
@@ -517,18 +521,18 @@ private:
 	}
 
 	unsigned int handleResponseBody(const TelemetryData &tmData,
-		const Json::Value &jsonBody)
+		const json::value &jsonvBody)
 	{
 		unsigned int backoffSec = 0;
-
-		if (jsonBody["data_processed"].asBool()) {
+		const json::object &jsonBody = jsonvBody.get_object();
+		if (jsonBody.at("data_processed").as_bool()) {
 			lastTelemetryData = tmData;
 		}
-		if (jsonBody.isMember("backoff")) {
-			backoffSec = jsonBody["backoff"].asUInt();
+		if (jsonBody.contains("backoff")) {
+			backoffSec = jsonBody.at("backoff").as_uint64();
 		}
-		if (jsonBody.isMember("log_message")) {
-			P_NOTICE("Message from " PROGRAM_AUTHOR ": " << jsonBody["log_message"].asString());
+		if (jsonBody.contains("log_message")) {
+			P_NOTICE("Message from " PROGRAM_AUTHOR ": " << jsonBody.at("log_message").as_string());
 		}
 
 		return backoffSec;
@@ -539,7 +543,7 @@ public:
 	vector<Controller *> controllers;
 
 	TelemetryCollector(const Schema &schema,
-		const Json::Value &initialConfig = Json::Value(),
+		const json::object &initialConfig = json::object(),
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: config(schema, initialConfig, translator),
 		  configRlz(config),
@@ -582,7 +586,7 @@ public:
 		SessionState sessionState(config, configRlz);
 		l.unlock();
 
-		if (sessionState.config["disabled"].asBool()) {
+		if (sessionState.config["disabled"].as_bool()) {
 			P_DEBUG("Telemetry collector disabled; not sending anonymous telemetry data");
 			return 0;
 		}
@@ -597,7 +601,7 @@ public:
 		string requestBody = createRequestBody(tmData);
 		string responseData;
 		char lastErrorMessage[CURL_ERROR_SIZE] = "unknown error";
-		Json::Value jsonBody;
+		json::value jsonBody;
 
 		curl = prepareCurlRequest(sessionState, isFinalRun, &headers,
 			lastErrorMessage, requestBody, responseData);
@@ -649,7 +653,7 @@ public:
 		return 0;
 	}
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::object &updates,
 		vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
 	{
 		{
@@ -668,7 +672,7 @@ public:
 		configRlz.swap(*req.configRlz);
 	}
 
-	Json::Value inspectConfig() const {
+	json::value inspectConfig() const {
 		boost::lock_guard<boost::mutex> l(configSyncher);
 		return config.inspect();
 	}

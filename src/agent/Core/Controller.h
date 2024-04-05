@@ -378,10 +378,10 @@ public:
 
 	Controller(ServerKit::Context *context,
 		const ControllerSchema &schema,
-		const Json::Value &initialConfig,
+		const json::value &initialConfig,
 		const ConfigKit::Translator &translator1 = ConfigKit::DummyTranslator(),
 		const ControllerSingleAppModeSchema *singleAppModeSchema = NULL,
-		const Json::Value *_singleAppModeConfig = NULL,
+		const json::object *_singleAppModeConfig = NULL,
 		const ConfigKit::Translator &translator2 = ConfigKit::DummyTranslator()
 		)
 		: ParentClass(context, schema, initialConfig, translator1),
@@ -415,7 +415,7 @@ public:
 
 	/****** Configuration handling ******/
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors, ControllerConfigChangeRequest &req);
 	void commitConfigChange(ControllerConfigChangeRequest &req)
 		BOOST_NOEXCEPT_OR_NOTHROW;
@@ -424,9 +424,9 @@ public:
 	/****** State and configuration ******/
 
 	unsigned int getThreadNumber() const; // Thread-safe
-	virtual Json::Value inspectStateAsJson() const;
-	virtual Json::Value inspectClientStateAsJson(const Client *client) const;
-	virtual Json::Value inspectRequestStateAsJson(const Request *req) const;
+	virtual json::value inspectStateAsJson() const;
+	virtual json::value inspectClientStateAsJson(const Client *client) const;
+	virtual json::value inspectRequestStateAsJson(const Request *req) const;
 
 
 	/****** Miscellaneous *******/

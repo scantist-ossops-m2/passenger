@@ -31,7 +31,7 @@
 #include <vector>
 #include <cstddef>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <Constants.h>
 #include <StaticString.h>
@@ -56,8 +56,8 @@ class Config {
 private:
 	boost::shared_array<char> storage;
 
-	Json::Value tableToJson(const StringKeyTable<StaticString> &table) const {
-		Json::Value doc(Json::objectValue);
+	json::value tableToJson(const StringKeyTable<StaticString> &table) const {
+		json::object doc;
 		StringKeyTable<StaticString>::ConstIterator it(table);
 
 		while (*it != NULL) {
@@ -396,8 +396,8 @@ public:
 
 	void internStrings();
 	bool validate(vector<StaticString> &errors) const;
-	Json::Value getConfidentialFieldsToPassToApp() const;
-	Json::Value getNonConfidentialFieldsToPassToApp() const;
+	json::value getConfidentialFieldsToPassToApp() const;
+	json::value getNonConfidentialFieldsToPassToApp() const;
 };
 // - end hinted parseable class -
 

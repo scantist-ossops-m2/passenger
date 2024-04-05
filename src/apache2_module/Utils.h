@@ -112,13 +112,13 @@ addHeader(string &headers, const StaticString &name, Apache2Module::Threeway val
 }
 
 template<typename Collection, typename String>
-inline Json::Value
+inline json::value
 strCollectionToJson(const Collection &collection) {
-	Json::Value result(Json::arrayValue);
+	json::value result(Json::arrayValue);
 	typename Collection::const_iterator it, end = collection.end();
 	for (it = collection.begin(); it != end; it++) {
 		const String &val = *it;
-		result.append(Json::Value(val.data(), val.data() + val.size()));
+		result.append(json::value(val.data(), val.data() + val.size()));
 	}
 	return result;
 }

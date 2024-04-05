@@ -23,6 +23,7 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  *  THE SOFTWARE.
  */
+#include <JsonTools/JsonUtils.h>
 #include <Core/ApplicationPool/Pool.h>
 
 /*************************************************************************
@@ -81,9 +82,9 @@ Pool::runHookScripts(const char *name,
 	const boost::function<void (HookScriptOptions &)> &setup) const
 {
 	ScopedLock l(context->agentConfigSyncher);
-	if (!context->agentConfig.isNull()) {
+	if (!context->agentConfig.is_null()) {
 		string hookName = string("hook_") + name;
-		string spec = context->agentConfig.get(hookName, Json::Value()).asString();
+		string spec = getJsonStringField(context->agentConfig, hookName.c_str());
 		if (!spec.empty()) {
 			HookScriptOptions options;
 			options.agentConfig = context->agentConfig;

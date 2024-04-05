@@ -36,21 +36,21 @@ namespace ConfigKit {
 using namespace std;
 
 
-inline Json::Value
+inline json::value
 getDefaultStandaloneEngine(const Store &store) {
-	if (store["integration_mode"].asString() == "standalone") {
+	if (store["integration_mode"].as_string() == "standalone") {
 		return "builtin";
 	} else {
-		return Json::nullValue;
+		return nullptr;
 	}
 }
 
 inline void
 validateIntegrationMode(const Store &config, vector<Error> &errors) {
-	if (config["integration_mode"].isNull()) {
+	if (config["integration_mode"].is_null()) {
 		return;
 	}
-	string integrationMode = config["integration_mode"].asString();
+	json::string integrationMode = config["integration_mode"].as_string();
 	if (integrationMode != "apache" && integrationMode != "nginx" && integrationMode != "standalone") {
 		errors.push_back(Error("'{{integration_mode}}' may only be one of 'apache', 'nginx', 'standalone'"));
 	}
@@ -58,10 +58,10 @@ validateIntegrationMode(const Store &config, vector<Error> &errors) {
 
 inline void
 validateStandaloneEngine(const Store &config, vector<Error> &errors) {
-	if (config["integration_mode"].asString() != "standalone") {
+	if (config["integration_mode"].as_string() != "standalone") {
 		return;
 	}
-	string standaloneEngine = config["standalone_engine"].asString();
+	json::string standaloneEngine = config["standalone_engine"].as_string();
 	if (standaloneEngine.empty()) {
 		errors.push_back(Error("'{{standalone_engine}}' is required when '{{integration_mode}}' is 'standalone'"));
 		return;

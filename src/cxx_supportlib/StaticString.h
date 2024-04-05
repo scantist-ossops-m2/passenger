@@ -33,6 +33,7 @@
 	#include <algorithm>
 #endif
 #include <boost/config.hpp>
+#include <boost/json.hpp>
 #include <oxt/macros.hpp>
 #include <sys/types.h>
 #include <string>
@@ -44,6 +45,7 @@
 namespace Passenger {
 
 using namespace std;
+namespace json = boost::json;
 
 #define P_STATIC_STRING(x) Passenger::StaticString(x, sizeof(x) - 1)
 #define P_STATIC_STRING_WITH_NULL(x) Passenger::StaticString(x, sizeof(x))
@@ -140,6 +142,16 @@ public:
 	StaticString &operator=(const StaticString &other) = default;
 
 	StaticString(const string &s) {
+		content = s.data();
+		len = s.size();
+	}
+
+	StaticString(const json::string &s) {
+		content = s.data();
+		len = s.size();
+	}
+
+	StaticString(const json::string_view &s) {
 		content = s.data();
 		len = s.size();
 	}
@@ -320,6 +332,10 @@ public:
 
 	operator string() const {
 		return string(content, len);
+	}
+
+	operator json::string_view() const noexcept {
+		return json::string_view(content, len);
 	}
 };
 

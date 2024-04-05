@@ -255,7 +255,7 @@ namespace tut {
 		unsigned int clientDataErrors;
 
 		MyServer(Context *context, const HttpServerSchema &schema,
-			const Json::Value &initialConfig = Json::Value())
+			const json::value &initialConfig = json::value())
 			: ParentClass(context, schema, initialConfig),
 			  allowUpgrades(true),
 			  enableAutoDechunkBody(true),
@@ -1521,7 +1521,7 @@ namespace tut {
 		set_test_name("If a secure mode password is given in the context, "
 			"it rejects requests that specify the wrong secure mode password");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["secure_mode_password"] = "secret";
 		ensure(context.configure(config, errors));
@@ -1543,7 +1543,7 @@ namespace tut {
 		set_test_name("If a secure mode password is given in the context, "
 			"it accepts requests that specify the correct secure mode password");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		config["secure_mode_password"] = "secret";
 		ensure(context.configure(config, errors));

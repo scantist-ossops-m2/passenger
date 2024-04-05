@@ -28,9 +28,11 @@
 
 #include <oxt/thread.hpp>
 #include <oxt/system_calls.hpp>
+#include <boost/json.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/make_shared.hpp>
 #include <string>
+#include <system_error>
 #include <vector>
 #include <map>
 #include <stdexcept>
@@ -170,7 +172,7 @@ private:
 		return result;
 	}
 
-	void setConfigFromAppPoolOptions(Config *config, Json::Value &extraArgs,
+	void setConfigFromAppPoolOptions(Config *config, json::value &extraArgs,
 		const AppPoolOptions &options)
 	{
 		Spawner::setConfigFromAppPoolOptions(config, extraArgs, options);
@@ -314,7 +316,7 @@ private:
 		P_DEBUG("Spawning new preloader: appRoot=" << options.appRoot);
 
 		Config config;
-		Json::Value extraArgs;
+		json::value extraArgs;
 		try {
 			setConfigFromAppPoolOptions(&config, extraArgs, options);
 			config.startCommand = preloaderCommandString;
@@ -340,10 +342,10 @@ private:
 	}
 
 	void internalStartPreloader(Config &config, HandshakeSession &session,
-		const Json::Value &extraArgs)
+		const json::value &extraArgs)
 	{
 		TRACE_POINT();
-		HandshakePrepare(session, extraArgs).execute();
+		HandshakePrepare(session, extraArgs.get_object()).execute();
 		Pipe stdinChannel = createPipe(__FILE__, __LINE__);
 		Pipe stdoutAndErrChannel = createPipe(__FILE__, __LINE__);
 		adhoc_lve::LveEnter scopedLveEnter(LveLoggingDecorator::lveInitOnce(),
@@ -663,7 +665,7 @@ private:
 		stepToMarkAsErrored = SPAWNING_KIT_CONNECT_TO_PRELOADER;
 		FileDescriptor fd;
 		string line;
-		Json::Value doc;
+		json::value doc;
 		try {
 			fd = connectToPreloader(session);
 		} catch (const SystemException &e) {
@@ -707,12 +709,12 @@ private:
 
 	void sendForkCommand(HandshakeSession &session, const FileDescriptor &fd) {
 		TRACE_POINT();
-		Json::Value doc;
+		json::object doc;
 
 		doc["command"] = "spawn";
 		doc["work_dir"] = session.workDir->getPath();
 
-		writeExact(fd, Json::FastWriter().write(doc), &session.timeoutUsec);
+		writeExact(fd, json::serialize(doc), &session.timeoutUsec);
 	}
 
 	string readForkCommandResponse(HandshakeSession &session, const FileDescriptor &fd) {
@@ -743,12 +745,11 @@ private:
 		}
 	}
 
-	Json::Value parseForkCommandResponse(HandshakeSession &session, const string &data) {
+	json::value parseForkCommandResponse(HandshakeSession &session, const string &data) {
 		TRACE_POINT();
-		Json::Value doc;
-		Json::Reader reader;
-
-		if (!reader.parse(data, doc)) {
+		error_code ec;
+		json::value doc = json::parse(data, ec);
+		if (ec) {
 			session.journey.setStepErrored(SPAWNING_KIT_PARSE_RESPONSE_FROM_PRELOADER);
 
 			SpawnException e(INTERNAL_ERROR, session.journey, session.config);
@@ -786,7 +787,7 @@ private:
 				" this helper process sent a response that does not match"
 				" the structure that " SHORT_PROGRAM_NAME " expects.</p>"
 				"<p>The response is as follows:</p>"
-				"<pre>" + escapeHTML(doc.toStyledString()) + "</pre>");
+				"<pre>" + escapeHTML(json::serialize(doc)) + "</pre>");
 			e.setSolutionDescriptionHTML(
 				"<p class=\"sole-solution\">"
 				"This is probably a bug in the preloader process. Please "
@@ -799,20 +800,21 @@ private:
 		return doc;
 	}
 
-	bool validateForkCommandResponse(const Json::Value &doc) const {
-		if (!doc.isObject()) {
+	bool validateForkCommandResponse(const json::value &vdoc) const {
+		if (!vdoc.is_object()) {
 			return false;
 		}
-		if (!doc.isMember("result") || !doc["result"].isString()) {
+		const json::object &doc = vdoc.get_object();
+		if (!doc.contains("result") || !doc.at("result").is_string()) {
 			return false;
 		}
-		if (doc["result"].asString() == "ok") {
-			if (!doc.isMember("pid") || !doc["pid"].isInt()) {
+		if (doc.at("result").as_string() == "ok") {
+			if (!doc.contains("pid") || !doc.at("pid").is_int64()) {
 				return false;
 			}
 			return true;
-		} else if (doc["result"].asString() == "error") {
-			if (!doc.isMember("message") || !doc["message"].isString()) {
+		} else if (doc.at("result").as_string() == "error") {
+			if (!doc.contains("message") || !doc.at("message").is_string()) {
 				return false;
 			}
 			return true;
@@ -823,23 +825,24 @@ private:
 
 	ForkResult handleForkCommandResponse(HandshakeSession &session,
 		const StdChannelsAsyncOpenStatePtr &stdChannelsAsyncOpenState,
-		const Json::Value &doc)
+		const json::value &vdoc)
 	{
 		TRACE_POINT();
-		if (doc["result"].asString() == "ok") {
+		json::object doc = vdoc.get_object();
+		if (doc["result"].as_string() == "ok") {
 			return handleForkCommandResponseSuccess(session, stdChannelsAsyncOpenState,
 				doc);
 		} else {
-			P_ASSERT_EQ(doc["result"].asString(), "error");
+			P_ASSERT_EQ(doc["result"].as_string(), "error");
 			return handleForkCommandResponseError(session, doc);
 		}
 	}
 
 	ForkResult handleForkCommandResponseSuccess(HandshakeSession &session,
-		const StdChannelsAsyncOpenStatePtr &stdChannelsAsyncOpenState, const Json::Value &doc)
+		const StdChannelsAsyncOpenStatePtr &stdChannelsAsyncOpenState, const json::value &doc)
 	{
 		TRACE_POINT();
-		pid_t spawnedPid = doc["pid"].asInt();
+		pid_t spawnedPid = doc.at("pid").as_int64();
 
 		// How do we know the preloader actually forked a process
 		// instead of reporting the PID of a random other existing process?
@@ -955,20 +958,20 @@ private:
 	}
 
 	ForkResult handleForkCommandResponseError(HandshakeSession &session,
-		const Json::Value &doc)
+		const json::value &vdoc)
 	{
 		session.journey.setStepErrored(SPAWNING_KIT_PROCESS_RESPONSE_FROM_PRELOADER);
-
+		const json::object &doc = vdoc.get_object();
 		SpawnException e(INTERNAL_ERROR, session.journey, session.config);
 		addPreloaderEnvDumps(e);
 		e.setSummary("An error occured while starting the web application: "
-			+ doc["message"].asString());
+					 + getJsonStringField(doc,"message"));
 		e.setProblemDescriptionHTML(
 			"<p>The " PROGRAM_NAME " application server tried to"
 			" start the web application by communicating with a"
 			" helper process that we call a \"preloader\". However, "
 			" this helper process reported an error:</p>"
-			"<pre>" + escapeHTML(doc["message"].asString()) + "</pre>");
+			"<pre>" + escapeHTML(getJsonStringField(doc,"message")) + "</pre>");
 		e.setSolutionDescriptionHTML(
 			"<p class=\"sole-solution\">"
 			"Please try troubleshooting the problem by studying the"
@@ -1284,7 +1287,7 @@ public:
 
 		UPDATE_TRACE_POINT();
 		Config config;
-		Json::Value extraArgs;
+		json::value extraArgs;
 		try {
 			setConfigFromAppPoolOptions(&config, extraArgs, options);
 		} catch (const std::exception &originalException) {
@@ -1302,7 +1305,7 @@ public:
 
 		try {
 			UPDATE_TRACE_POINT();
-			HandshakePrepare prepare(session, extraArgs);
+			HandshakePrepare prepare(session, extraArgs.get_object());
 			prepare.execute();
 			createStdChannelFifos(session);
 			prepare.finalize();

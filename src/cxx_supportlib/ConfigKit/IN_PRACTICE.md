@@ -72,7 +72,7 @@ You can learn more about all this in the examples provided in this document, as 
 Here is how a typical invocation looks like, given a `Component component` object:
 
 ~~~c++
-Json::Value updates;
+json::value updates;
 updates["url"] = "http://www.google.com";
 updates["debug"] = true;
 
@@ -120,7 +120,7 @@ if (errors.empty()) {
 
 ### Inspecting a component's configuration
 
-A component should expose a `Json::Value inspectConfig() const` method which returns a JSON object in the same format as `ConfigKit::Store::inspect()`.
+A component should expose a `json::value inspectConfig() const` method which returns a JSON object in the same format as `ConfigKit::Store::inspect()`.
 
 ## Asynchronous components
 
@@ -233,14 +233,14 @@ public:
     // This constructor accepts a translator: it is necessary to allow parent
     // components to compose child components. You will see the usage
     // of this constructor in the Downloader example.
-    SecurityChecker(const Schema &schema, const Json::Value &initialConfig,
+    SecurityChecker(const Schema &schema, const json::value &initialConfig,
         const Translator &translator)
         : config(schema, initialConfig, translator)
         { }
 
     // This is the configuration preparation change method, as described
     // in "Configuring a component".
-    bool prepareConfigChange(const Json::Value &updates,
+    bool prepareConfigChange(const json::value &updates,
         vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
     {
         // In simple low-level components, it simply merges the current
@@ -277,7 +277,7 @@ public:
     }
 
     // This method inspects the component's configuration.
-    Json::Value inspectConfig() const {
+    json::value inspectConfig() const {
         // In simple low-level components, it's as simple as forwarding
         // the call to the configuration store.
         return config.inspect();
@@ -298,7 +298,7 @@ Use SecurityChecker like this:
 
 ~~~c++
 SecurityChecker::Schema schema;
-Json::Value config;
+json::value config;
 config["db_path"] = "/db";
 config["url"] = "http://www.google.com";
 
@@ -439,7 +439,7 @@ private:
 public:
     // Same as with SecurityChecker, but also initializes
     // the config realization object.
-    DnsQuerier(const Schema &schema, const Json::Value &initialConfig,
+    DnsQuerier(const Schema &schema, const json::value &initialConfig,
         const Translator &translator = ConfigKit::DummyTranslator())
         : config(schema, initialConfig, translator),
           configRlz(config)
@@ -448,7 +448,7 @@ public:
     // Same as with SecurityChecker, but also creates a new
     // config realization object from the new config.
     // Note that we only do that if there are no validation errors.
-    bool prepareConfigChange(const Json::Value &updates,
+    bool prepareConfigChange(const json::value &updates,
         vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
     {
         req.config.reset(new ConfigKit::Store(config, updates, errors));
@@ -466,7 +466,7 @@ public:
     }
 
     // Same as with SecurityChecker.
-    Json::Value inspectConfig() const {
+    json::value inspectConfig() const {
         return config.inspect();
     }
 
@@ -575,7 +575,7 @@ private:
 public:
     // Same as with DnsQuerier, but also initializes our own
     // private config realization object.
-    HappyDnsQuerier(const Schema &schema, const Json::Value &initialConfig,
+    HappyDnsQuerier(const Schema &schema, const json::value &initialConfig,
         const Translator &translator = ConfigKit::DummyTranslator())
         : DnsQuerier(schema, initialConfig, translator),
           configRlz(config)
@@ -583,7 +583,7 @@ public:
 
     // Same as with DnsQuerier, but also creates our own
     // config realization object (but only if validation passes).
-    bool prepareConfigChange(const Json::Value &updates,
+    bool prepareConfigChange(const json::value &updates,
         vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
     {
         if (DnsQuerier::prepareConfigChange(updates, errors, req.forParent)) {
@@ -728,7 +728,7 @@ public:
     // It is because the parent component may define different default
     // values than subcomponents. By passing effective values,
     // such default value overrides are respected.
-    Downloader(const Schema &schema, const Json::Value &initialConfig,
+    Downloader(const Schema &schema, const json::value &initialConfig,
         const Translator &translator = ConfigKit::DummyTranslator())
         : config(schema, initialConfig, translator),
           securityChecker(schema.securityChecker.schema,
@@ -739,7 +739,7 @@ public:
               schema.happyDnsQuerier.translator)
         { }
 
-    bool prepareConfigChange(const Json::Value &updates,
+    bool prepareConfigChange(const json::value &updates,
         vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
     {
         const Schema &schema = static_cast<const Schema &>(config.getSchema());
@@ -786,7 +786,7 @@ public:
 
     // As explained, simply returning our internal configuration store
     // is enough to expose all the subcomponents' configuration values too.
-    Json::Value inspectConfig() const {
+    json::value inspectConfig() const {
         return config.inspect();
     }
 
@@ -812,7 +812,7 @@ To close this section, here is an example of how the main function would look li
 int
 main() {
     // Set configuration
-    Json::Value config;
+    json::value config;
     config["url"] = "http://www.google.com";
     config["security_checker_db_path"] = "/db";
     config["dns_query_log_file"] = "dns.log";
@@ -901,13 +901,13 @@ private:
 public:
     // Only change from synchronous version is that we now accept
     // an event loop object.
-    SecurityChecker(const Schema &schema, const Json::Value &initialConfig,
+    SecurityChecker(const Schema &schema, const json::value &initialConfig,
         const EventLoopType &_eventLoop)
         : eventLoop(eventLoop),
           config(schema, initialConfig)
         { }
 
-    SecurityChecker(const Schema &schema, const Json::Value &initialConfig,
+    SecurityChecker(const Schema &schema, const json::value &initialConfig,
         const EventLoopType &_eventLoop,
         const Translator &translator = ConfigKit::DummyTranslator())
         : eventLoop(eventLoop),
@@ -915,7 +915,7 @@ public:
         { }
 
     // No change from synchronous version.
-    bool prepareConfigChange(const Json::Value &updates,
+    bool prepareConfigChange(const json::value &updates,
         vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
     {
         req.config.reset(new ConfigKit::Store(config, updates, errors));
@@ -928,7 +928,7 @@ public:
     }
 
     // No change from synchronous version.
-    Json::Value inspectConfig() const {
+    json::value inspectConfig() const {
         return config.inspect();
     }
 
@@ -937,7 +937,7 @@ public:
 
     // Performs the same thing as the synchronous version, but
     // over the event loop.
-    void asyncPrepareConfigChange(const Json::Value &updates,
+    void asyncPrepareConfigChange(const json::value &updates,
         ConfigChangeRequest &req,
         const ConfigKit::CallbackTypes<SecurityChecker>::PrepareConfigChange &callback)
     {

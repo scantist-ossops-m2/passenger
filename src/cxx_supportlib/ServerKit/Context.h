@@ -63,7 +63,7 @@ public:
 	Config config;
 	struct MemoryKit::mbuf_pool mbuf_pool;
 
-	Context(const Schema &schema, const Json::Value &initialConfig = Json::Value(),
+	Context(const Schema &schema, const json::object &initialConfig = json::object(),
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: configStore(schema, initialConfig, translator),
 		  libuv(NULL),
@@ -82,7 +82,7 @@ public:
 			throw RuntimeException("libuv must be non-NULL");
 		}
 
-		mbuf_pool.mbuf_block_chunk_size = configStore["mbuf_block_chunk_size"].asUInt();
+		mbuf_pool.mbuf_block_chunk_size = configStore["mbuf_block_chunk_size"].as_uint64();
 		if ((mbuf_pool.mbuf_block_chunk_size - sizeof(struct MemoryKit::mbuf_block)) % alignof(struct MemoryKit::mbuf_block) != 0) {
 			throw RuntimeException("mbuf_block_chunk_size(" +
 								   toString(mbuf_pool.mbuf_block_chunk_size) +
@@ -92,7 +92,7 @@ public:
 		MemoryKit::mbuf_pool_init(&mbuf_pool);
 	}
 
-	bool configure(const Json::Value &updates, vector<ConfigKit::Error> &errors) {
+	bool configure(const json::object &updates, vector<ConfigKit::Error> &errors) {
 		ConfigChangeRequest req;
 		bool result = prepareConfigChange(updates, errors, req);
 		if (result) {
@@ -101,7 +101,7 @@ public:
 		return result;
 	}
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::object &updates,
 		vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
 	{
 		req.configStore.reset(new ConfigKit::Store(configStore, updates, errors));
@@ -116,18 +116,18 @@ public:
 		config.swap(*req.config);
 	}
 
-	Json::Value inspectConfig() const {
+	json::value inspectConfig() const {
 		return configStore.inspect();
 	}
 
-	Json::Value inspectStateAsJson() const {
-		Json::Value doc;
-		Json::Value mbufDoc;
+	json::value inspectStateAsJson() const {
+		json::object doc;
+		json::object mbufDoc;
 
-		mbufDoc["free_blocks"] = (Json::UInt) mbuf_pool.nfree_mbuf_blockq;
-		mbufDoc["active_blocks"] = (Json::UInt) mbuf_pool.nactive_mbuf_blockq;
-		mbufDoc["chunk_size"] = (Json::UInt) mbuf_pool.mbuf_block_chunk_size;
-		mbufDoc["offset"] = (Json::UInt) mbuf_pool.mbuf_block_offset;
+		mbufDoc["free_blocks"] = (uint64_t) mbuf_pool.nfree_mbuf_blockq;
+		mbufDoc["active_blocks"] = (uint64_t) mbuf_pool.nactive_mbuf_blockq;
+		mbufDoc["chunk_size"] = (uint64_t) mbuf_pool.mbuf_block_chunk_size;
+		mbufDoc["offset"] = (uint64_t) mbuf_pool.mbuf_block_offset;
 		mbufDoc["spare_memory"] = byteSizeToJson(mbuf_pool.nfree_mbuf_blockq
 			* mbuf_pool.mbuf_block_chunk_size);
 		mbufDoc["active_memory"] = byteSizeToJson(mbuf_pool.nactive_mbuf_blockq
@@ -137,10 +137,10 @@ public:
 				const_cast<struct MemoryKit::active_mbuf_block_list *>(
 					&mbuf_pool.active_mbuf_blockq);
 			struct MemoryKit::mbuf_block *block;
-			Json::Value listJson(Json::arrayValue);
+			json::value listJson(Json::arrayValue);
 
 			TAILQ_FOREACH (block, list, active_q) {
-				Json::Value blockJson;
+				json::value blockJson;
 				blockJson["refcount"] = block->refcount;
 				#ifdef MBUF_ENABLE_BACKTRACES
 					blockJson["backtrace"] =

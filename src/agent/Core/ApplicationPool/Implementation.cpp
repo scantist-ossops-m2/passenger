@@ -221,10 +221,10 @@ void processAndLogNewSpawnException(SpawningKit::SpawnException &e, const Option
 	P_ERROR(stream.str());
 
 	ScopedLock l(context->agentConfigSyncher);
-	if (!context->agentConfig.isNull()) {
+	if (!context->agentConfig.is_null()) {
 		HookScriptOptions hOptions;
 		hOptions.name = "spawn_failed";
-		hOptions.spec = context->agentConfig.get("hook_spawn_failed", Json::Value()).asString();
+		hOptions.spec = getJsonStringField(context->agentConfig,"hook_spawn_failed");
 		hOptions.agentConfig = context->agentConfig;
 		l.unlock();
 		hOptions.environment.push_back(make_pair("PASSENGER_APP_ROOT", options.appRoot));

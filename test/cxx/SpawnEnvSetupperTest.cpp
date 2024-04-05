@@ -37,7 +37,7 @@ namespace tut {
 			config.internStrings();
 		}
 
-		void init(JourneyType type, const Json::Value &extraArgs = Json::Value()) {
+		void init(JourneyType type, const json::value &extraArgs = json::value()) {
 			vector<StaticString> errors;
 			ensure("Config is valid", config.validate(errors));
 			session = boost::make_shared<HandshakeSession>(context, config, type);
@@ -151,7 +151,7 @@ namespace tut {
 		init(SPAWN_DIRECTLY);
 		ensure("SpawnEnvSetupper succeeds", execute("--before"));
 
-		Json::Value doc;
+		json::value doc;
 		ensure("Load environment JSON dump",
 			Json::Reader().parse(unsafeReadFile("tmp.wsgi/env.json"), doc));
 		ensure_equals(doc["MY_VAR"].asString(), "value");
@@ -277,7 +277,7 @@ namespace tut {
 
 		TempDirCopy dir("stub/wsgi", "tmp.wsgi");
 		config.startsUsingWrapper = true;
-		Json::Value extraArgs;
+		json::value extraArgs;
 		extraArgs["_bin_sh_path"] = "/non-existant-command";
 		init(SPAWN_DIRECTLY, extraArgs);
 		ensure("SpawnEnvSetupper fails", !execute("--before", true));
@@ -311,7 +311,7 @@ namespace tut {
 
 		TempDirCopy dir("stub/wsgi", "tmp.wsgi");
 		config.startsUsingWrapper = false;
-		Json::Value extraArgs;
+		json::value extraArgs;
 		extraArgs["_bin_sh_path"] = "/non-existant-command";
 		init(SPAWN_DIRECTLY, extraArgs);
 		ensure("SpawnEnvSetupper fails", !execute("--before", true));

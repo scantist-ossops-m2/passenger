@@ -103,17 +103,17 @@ Controller::initialize() {
 	}
 
 	ParentClass::initialize();
-	turboCaching.initialize(config["turbocaching"].asBool());
+	turboCaching.initialize(config["turbocaching"].as_bool());
 
 	if (mainConfig.singleAppMode) {
 		boost::shared_ptr<Options> options = boost::make_shared<Options>();
 		fillPoolOptionsFromConfigCaches(*options, mainConfig.pool, requestConfig);
 
-		string appRoot = singleAppModeConfig->get("app_root").asString();
-		string environment = config["default_environment"].asString();
-		string appType = singleAppModeConfig->get("app_type").asString();
-		string startupFile = singleAppModeConfig->get("startup_file").asString();
-		string appStartCommand = singleAppModeConfig->get("app_start_command").asString();
+		json::string appRoot = singleAppModeConfig->get("app_root").as_string();
+		json::string environment = config["default_environment"].as_string();
+		json::string appType = singleAppModeConfig->get("app_type").as_string();
+		json::string startupFile = singleAppModeConfig->get("startup_file").as_string();
+		json::string appStartCommand = singleAppModeConfig->get("app_start_command").as_string();
 
 		options->appRoot = appRoot;
 		options->environment = environment;

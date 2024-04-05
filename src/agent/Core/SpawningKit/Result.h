@@ -34,6 +34,7 @@
 #include <FileDescriptor.h>
 #include <Exceptions.h>
 #include <SystemTools/SystemTime.h>
+#include <JsonTools/JsonUtils.h>
 #include <ConfigKit/ConfigKit.h>
 #include <Core/SpawningKit/Context.h>
 #include <Core/SpawningKit/Config.h>
@@ -82,7 +83,7 @@ public:
 			  acceptHttpRequests(false)
 			{ }
 
-		Socket(const Schema &schema, const Json::Value &values) {
+		Socket(const Schema &schema, const json::value &values) {
 			ConfigKit::Store store(schema);
 			vector<ConfigKit::Error> errors;
 
@@ -91,17 +92,17 @@ public:
 					+ toString(errors));
 			}
 
-			address = store["address"].asString();
-			protocol = store["protocol"].asString();
-			if (!store["description"].isNull()) {
-				description = store["description"].asString();
+			address = jsonValueToString(store["address"]);
+			protocol = jsonValueToString(store["protocol"]);
+			if (!store["description"].is_null()) {
+				description = jsonValueToString(store["description"]);
 			}
-			concurrency = store["concurrency"].asInt();
-			acceptHttpRequests = store["accept_http_requests"].asBool();
+			concurrency = store["concurrency"].as_int64();
+			acceptHttpRequests = store["accept_http_requests"].as_bool();
 		}
 
-		Json::Value inspectAsJson() const {
-			Json::Value doc;
+		json::value inspectAsJson() const {
+			json::object doc;
 			doc["address"] = address;
 			doc["protocol"] = protocol;
 			if (!description.empty()) {

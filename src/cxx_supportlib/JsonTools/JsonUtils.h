@@ -30,7 +30,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstddef>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <boost/cstdint.hpp>
 #include <StaticString.h>
 #include <SystemTools/SystemTime.h>
@@ -50,117 +50,111 @@ using namespace std;
  *
  **************************************************************/
 
-inline const Json::Value &
-getJsonField(const Json::Value &json, const char *key) {
-	Json::StaticString theKey(key);
-	if (json.isMember(theKey)) {
-		return json[theKey];
+inline const json::value &
+getJsonField(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json.at(key);
 	} else {
 		throw VariantMap::MissingKeyException(key);
 	}
 }
 
-inline Json::Value &
-getJsonField(Json::Value &json, const char *key) {
-	Json::StaticString theKey(key);
-	if (json.isMember(theKey)) {
-		return json[theKey];
-	} else {
-		throw VariantMap::MissingKeyException(key);
-	}
-}
-
-
-inline int
-getJsonIntField(const Json::Value &json, const char *key) {
-	if (json.isMember(key)) {
-		return json[key].asInt();
+inline json::value &
+getJsonField(json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json[key];
 	} else {
 		throw VariantMap::MissingKeyException(key);
 	}
 }
 
 inline int
-getJsonIntField(const Json::Value &json, const Json::StaticString &key) {
-	if (json.isMember(key)) {
-		return json[key].asInt();
+getJsonIntField(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json.at(key).as_int64();
+	} else {
+		throw VariantMap::MissingKeyException(key);
+	}
+}
+
+inline int
+getJsonIntField(const json::object &json, const json::string &key) {
+	if (json.contains(key)) {
+		return json.at(key).as_int64();
 	} else {
 		throw VariantMap::MissingKeyException(key.c_str());
 	}
 }
 
 inline int
-getJsonIntField(const Json::Value &json, const Json::StaticString &key, int defaultValue) {
-	if (json.isMember(key)) {
-		return json[key].asInt();
+getJsonIntField(const json::object &json, const json::string &key, int defaultValue) {
+	if (json.contains(key)) {
+		return json.at(key).as_int64();
 	} else {
 		return defaultValue;
 	}
 }
 
 inline void
-getJsonIntField(const Json::Value &json, const Json::StaticString &key, int *result) {
-	if (json.isMember(key)) {
-		*result = json[key].asInt();
+getJsonIntField(const json::object &json, const json::string &key, int *result) {
+	if (json.contains(key)) {
+		*result = json.at(key).as_int64();
 	}
 }
 
 inline void
-getJsonIntField(const Json::Value &json, const string &key, int *result) {
-	if (json.isMember(key)) {
-		*result = json[key].asInt();
+getJsonIntField(const json::object &json, const string &key, int *result) {
+	if (json.contains(key)) {
+		*result = json.at(key).as_int64();
 	}
 }
 
 
 inline unsigned int
-getJsonUintField(const Json::Value &json, const Json::StaticString &key) {
-	if (json.isMember(key)) {
-		return json[key].asUInt();
+getJsonUintField(const json::object &json, const json::string &key) {
+	if (json.contains(key)) {
+		return json.at(key).as_uint64();
 	} else {
 		throw VariantMap::MissingKeyException(key.c_str());
 	}
 }
 
 inline unsigned int
-getJsonUintField(const Json::Value &json, const Json::StaticString &key, unsigned int defaultValue) {
-	if (json.isMember(key)) {
-		return json[key].asUInt();
+getJsonUintField(const json::object &json, const json::string &key, unsigned int defaultValue) {
+	if (json.contains(key)) {
+		return json.at(key).as_uint64();
 	} else {
 		return defaultValue;
 	}
 }
 
 inline void
-getJsonUintField(const Json::Value &json, const Json::StaticString &key, unsigned int *result) {
-	if (json.isMember(key)) {
-		*result = json[key].asUInt();
+getJsonUintField(const json::object &json, const json::string &key, unsigned int *result) {
+	if (json.contains(key)) {
+		*result = json.at(key).as_uint64();
 	}
 }
 
 inline void
-getJsonUintField(const Json::Value &json, const string &key, unsigned int *result) {
-	if (json.isMember(key)) {
-		*result = json[key].asUInt();
+getJsonUintField(const json::object &json, const string &key, unsigned int *result) {
+	if (json.contains(key)) {
+		*result = json.at(key).as_uint64();
 	}
 }
 
-
 inline boost::uint64_t
-getJsonUint64Field(const Json::Value &json, const char *key) {
-	Json::StaticString theKey(key);
-	if (json.isMember(theKey)) {
-		return json[theKey].asUInt64();
+getJsonUint64Field(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json.at(key).as_uint64();
 	} else {
 		throw VariantMap::MissingKeyException(key);
 	}
 }
 
 inline boost::uint64_t
-getJsonUint64Field(const Json::Value &json, const char *key, unsigned int defaultValue) {
-	Json::StaticString theKey(key);
-	if (json.isMember(theKey)) {
-		return json[theKey].asUInt64();
+getJsonUint64Field(const json::object &json, const char *key, unsigned int defaultValue) {
+	if (json.contains(key)) {
+		return json.at(key).as_uint64();
 	} else {
 		return defaultValue;
 	}
@@ -168,44 +162,197 @@ getJsonUint64Field(const Json::Value &json, const char *key, unsigned int defaul
 
 
 inline bool
-getJsonBoolField(const Json::Value &json, const char *key) {
-	if (json.isMember(key)) {
-		return json[key].asBool();
+getJsonBoolField(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json.at(key).as_bool();
 	} else {
 		throw VariantMap::MissingKeyException(key);
 	}
 }
 
+inline std::string
+getJsonStringField(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json::value_to<std::string>(json.at(key));
+	} else {
+		throw VariantMap::MissingKeyException(key);
+	}
+}
 
-inline StaticString
-getJsonStaticStringField(const Json::Value &json, const char *key) {
-	if (json.isMember(key)) {
-		return json[key].asCString();
+inline const char*
+getJsonCStringField(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json.at(key).get_string().c_str();
 	} else {
 		throw VariantMap::MissingKeyException(key);
 	}
 }
 
 inline StaticString
-getJsonStaticStringField(const Json::Value &json, const Json::StaticString &key) {
-	if (json.isMember(key)) {
-		return json[key].asCString();
+getJsonStaticStringField(const json::object &json, const char *key) {
+	if (json.contains(key)) {
+		return json.at(key).get_string().c_str();
+	} else {
+		throw VariantMap::MissingKeyException(key);
+	}
+}
+
+inline StaticString
+getJsonStaticStringField(const json::object &json, const json::string &key) {
+	if (json.contains(key)) {
+		return json.at(key).get_string().c_str();
 	} else {
 		throw VariantMap::MissingKeyException(key.c_str());
 	}
 }
 
 inline StaticString
-getJsonStaticStringField(const Json::Value &json, const Json::StaticString &key,
+getJsonStaticStringField(const json::object &json, const json::string &key,
 	const StaticString &defaultValue)
 {
-	if (json.isMember(key)) {
-		return json[key].asCString();
+	if (json.contains(key)) {
+		return json.at(key).as_string().c_str();
 	} else {
 		return defaultValue;
 	}
 }
 
+inline const json::object&
+getJsonObjectField(const json::object &json, const json::string &key){
+	if (json.contains(key)) {
+		return json.at(key).get_object();
+	} else {
+		throw VariantMap::MissingKeyException(key.c_str());
+	}
+}
+
+inline const json::value &
+getJsonField(const json::value &json, const char *key) {
+	return getJsonField(json.get_object(), key);
+}
+
+inline json::value &
+getJsonField(json::value &json, const char *key) {
+	return getJsonField(json.get_object(), key);
+}
+
+inline int
+getJsonIntField(const json::value &json, const char *key) {
+	return getJsonIntField(json.get_object(), key);
+}
+
+inline int
+getJsonIntField(const json::value &json, const json::string &key) {
+	return getJsonIntField(json.get_object(), key);
+}
+
+inline int
+getJsonIntField(const json::value &json, const json::string &key, int defaultValue) {
+	return getJsonIntField(json.get_object(), key);
+}
+
+inline void
+getJsonIntField(const json::value &json, const json::string &key, int *result) {
+	return getJsonIntField(json.get_object(), key, result);
+}
+
+inline void
+getJsonIntField(const json::value &json, const string &key, int *result) {
+	return getJsonIntField(json.get_object(), key, result);
+}
+
+
+inline unsigned int
+getJsonUintField(const json::value &json, const json::string &key) {
+	return getJsonUintField(json.get_object(), key);
+}
+
+inline unsigned int
+getJsonUintField(const json::value &json, const json::string &key, unsigned int defaultValue) {
+	return getJsonUintField(json.get_object(), key, defaultValue);
+}
+
+inline void
+getJsonUintField(const json::value &json, const json::string &key, unsigned int *result) {
+	return getJsonUintField(json.get_object(), key, result);
+}
+
+inline void
+getJsonUintField(const json::value &json, const string &key, unsigned int *result) {
+	return getJsonUintField(json.get_object(), key, result);
+}
+
+inline boost::uint64_t
+getJsonUint64Field(const json::value &json, const char *key) {
+	return getJsonUintField(json.get_object(), key);
+}
+
+inline boost::uint64_t
+getJsonUint64Field(const json::value &json, const char *key, unsigned int defaultValue) {
+	return getJsonUintField(json.get_object(), key, defaultValue);
+}
+
+inline bool
+getJsonBoolField(const json::value &json, const char *key) {
+	return getJsonBoolField(json.get_object(), key);
+}
+
+inline std::string
+getJsonStringField(const json::value &json, const char *key) {
+	return getJsonStringField(json.get_object(), key);
+}
+
+inline const char*
+getJsonCStringField(const json::value &json, const char *key) {
+	return getJsonCStringField(json.get_object(), key);
+}
+
+inline StaticString
+getJsonStaticStringField(const json::value &json, const char *key) {
+	return getJsonStaticStringField(json.get_object(), key);
+}
+
+inline StaticString
+getJsonStaticStringField(const json::value &json, const json::string &key) {
+	return getJsonStaticStringField(json.get_object(), key);
+}
+
+inline StaticString
+getJsonStaticStringField(const json::value &json, const json::string &key,
+	const StaticString &defaultValue)
+{
+	return getJsonStaticStringField(json.get_object(), key, defaultValue);
+}
+
+inline const json::object&
+getJsonObjectField(const json::value &json, const json::string &key)
+{
+	return getJsonObjectField(json.get_object(), key);
+}
+
+inline string
+jsonValueToString(const json::value &value) {
+		switch (value.kind()) {
+		case json::kind::null:
+			return "";
+		case json::kind::int64:
+			return toString(value.as_int64());
+		case json::kind::uint64:
+			return toString(value.as_uint64());
+		case json::kind::double_:
+			return toString(value.as_double());
+		case json::kind::string:
+			return json::value_to<std::string>(value);
+		case json::kind::bool_:
+			if (value.as_bool()) {
+				return "true";
+			} else {
+				return "false";
+			}
+		default:
+			return json::serialize(value);
+		}
+}
 
 /**************************************************************
  *
@@ -218,17 +365,16 @@ getJsonStaticStringField(const Json::Value &json, const Json::StaticString &key,
  * This string is not prettified and does not contain a
  * trailing newline.
  *
- *     Json::Value doc;
+ *     json::value doc;
  *     doc["foo"] = "bar";
  *     cout << stringifyJson(doc) << endl;
  *     // Prints:
  *     // {"foo": "bar"}
  */
 inline string
-stringifyJson(const Json::Value &value) {
-	Json::FastWriter writer;
-	string str = writer.write(value);
-	str.erase(str.size() - 1, 1);
+stringifyJson(const json::value &value) {
+	string str = json::serialize(value);
+	//str.erase(str.size() - 1, 1);
 	return str;
 }
 
@@ -241,7 +387,7 @@ stringifyJson(const Json::Value &value) {
  */
 inline string
 jsonString(const Passenger::StaticString &str) {
-	return stringifyJson(Json::Value(Json::StaticString(str.data())));
+	return stringifyJson(json::value(str.data()));
 }
 
 /**
@@ -255,13 +401,13 @@ jsonString(const Passenger::StaticString &str) {
  *     //   "relative": "10s ago"
  *     // }
  */
-inline Json::Value
+inline json::value
 timeToJson(unsigned long long timestamp, unsigned long long now = 0) {
 	if (timestamp == 0) {
-		return Json::Value(Json::nullValue);
+		return json::value(nullptr);
 	}
 
-	Json::Value doc;
+	json::object doc;
 	time_t wallClockTime = (time_t) (timestamp / 1000000ull);
 	char wallClockTimeStr[32];
 	size_t len;
@@ -303,10 +449,10 @@ timeToJson(unsigned long long timestamp, unsigned long long now = 0) {
  *     //   "relative": "10s ago"
  *     // }
  */
-inline Json::Value
+inline json::value
 monoTimeToJson(MonotonicTimeUsec t, MonotonicTimeUsec monoNow, unsigned long long now = 0) {
 	if (t == 0) {
-		return Json::Value(Json::nullValue);
+		return json::value(nullptr);
 	}
 
 	if (now == 0) {
@@ -332,7 +478,7 @@ monoTimeToJson(MonotonicTimeUsec t, MonotonicTimeUsec monoNow, unsigned long lon
 		}
 	}
 
-	Json::Value doc;
+	json::object doc;
 	doc["timestamp"] = wallClockTimeUsec / 1000000.0;
 	if (ctimeResult != NULL) {
 		doc["local"] = timeStr;
@@ -347,12 +493,12 @@ monoTimeToJson(MonotonicTimeUsec t, MonotonicTimeUsec monoNow, unsigned long lon
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 durationToJson(unsigned long long duration) {
-	Json::Value doc;
+	json::object doc;
 	char buf[64];
 
-	doc["microseconds"] = (Json::UInt64) duration;
+	doc["microseconds"] = duration;
 	if (duration >= 10 * 1000000) {
 		snprintf(buf, sizeof(buf), "%.1fs", duration / 1000000.0);
 	} else {
@@ -377,11 +523,11 @@ capFloatPrecision(double val) {
 	return atof(buf);
 }
 
-inline Json::Value
+inline json::value
 speedToJson(double speed, const string &per, double nullValue = -1) {
-	Json::Value doc;
+	json::object doc;
 	if (speed == nullValue) {
-		doc["value"] = Json::Value(Json::nullValue);
+		doc["value"] = json::value(nullptr);
 	} else {
 		doc["value"] = speed;
 	}
@@ -389,11 +535,11 @@ speedToJson(double speed, const string &per, double nullValue = -1) {
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 averageSpeedToJson(double speed, const string &per, const string &averagedOver, double nullValue = -1) {
-	Json::Value doc;
+	json::object doc;
 	if (speed == nullValue) {
-		doc["value"] = Json::Value(Json::nullValue);
+		doc["value"] = json::value(nullptr);
 	} else {
 		doc["value"] = speed;
 	}
@@ -402,10 +548,10 @@ averageSpeedToJson(double speed, const string &per, const string &averagedOver, 
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 byteSizeToJson(size_t size) {
-	Json::Value doc;
-	doc["bytes"] = (Json::UInt64) size;
+	json::object doc;
+	doc["bytes"] = size;
 	if (size < 1024) {
 		doc["human_readable"] = toString(size) + " bytes";
 	} else if (size < 1024 * 1024) {
@@ -416,11 +562,11 @@ byteSizeToJson(size_t size) {
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 signedByteSizeToJson(long long size) {
-	Json::Value doc;
+	json::object doc;
 	long long absSize = (size < 0) ? -size : size;
-	doc["bytes"] = (Json::Int64) size;
+	doc["bytes"] = size;
 	if (absSize < 1024) {
 		doc["human_readable"] = toString(size) + " bytes";
 	} else if (absSize < 1024 * 1024) {
@@ -431,36 +577,36 @@ signedByteSizeToJson(long long size) {
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 byteSpeedToJson(double speed, const string &per) {
-	Json::Value doc;
+	json::value doc;
 	if (speed >= 0) {
 		doc = byteSizeToJson(llround(speed));
 	} else {
 		doc = signedByteSizeToJson(llround(speed));
 	}
-	doc["per"] = per;
+	doc.get_object()["per"] = per;
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 byteSpeedToJson(double speed, double nullValue, const string &per) {
-	Json::Value doc;
+	json::value doc;
 	if (speed == nullValue) {
-		doc["bytes"] = Json::Value(Json::nullValue);
+		doc = {{"bytes", json::value(nullptr)}};
 	} else if (speed >= 0) {
 		doc = byteSizeToJson(llround(speed));
 	} else {
 		doc = signedByteSizeToJson(llround(speed));
 	}
-	doc["per"] = per;
+	doc.get_object()["per"] = per;
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 byteSizeAndCountToJson(size_t size, unsigned int count) {
-	Json::Value doc = byteSizeToJson(size);
-	doc["count"] = count;
+	json::value doc = byteSizeToJson(size);
+	doc.get_object()["count"] = count;
 	return doc;
 }
 

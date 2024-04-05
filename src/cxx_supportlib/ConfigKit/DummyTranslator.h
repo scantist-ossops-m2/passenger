@@ -34,7 +34,7 @@ namespace Passenger {
 namespace ConfigKit {
 
 using namespace std;
-
+namespace json = boost::json;
 
 /**
  * A translator that does nothing.
@@ -44,11 +44,11 @@ using namespace std;
  */
 class DummyTranslator: public Translator {
 public:
-	virtual Json::Value translate(const Json::Value &doc) const {
+	virtual json::object translate(const json::object &doc) const {
 		return doc;
 	}
 
-	virtual Json::Value reverseTranslate(const Json::Value &doc) const {
+	virtual json::object reverseTranslate(const json::object &doc) const {
 		return doc;
 	}
 

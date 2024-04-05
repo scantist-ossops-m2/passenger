@@ -30,7 +30,7 @@
 #include <map>
 #include <cctype>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <Constants.h>
 #include <StaticString.h>
@@ -64,21 +64,23 @@ public:
 		string cssContent = unsafeReadFile(cssFile);
 		string jsContent = unsafeReadFile(jsFile);
 
-		Json::Value spec;
+		json::object spec;
 		spec["program_name"] = PROGRAM_NAME;
 		spec["short_program_name"] = SHORT_PROGRAM_NAME;
 		spec["config"] = e.getConfig().getNonConfidentialFieldsToPassToApp();
 		spec["journey"] = e.getJourney().inspectAsJson();
 		spec["error"] = e.inspectBasicInfoAsJson();
-		spec["diagnostics"]["system_wide"] = e.inspectSystemWideDetailsAsJson();
-		spec["diagnostics"]["core_process"] = e.inspectParentProcessDetailsAsJson();
+		spec["diagnostics"] = json::object();
+		json::object &diagnostics = spec["diagnostics"].get_object();
+		diagnostics["system_wide"] = e.inspectSystemWideDetailsAsJson();
+		diagnostics["core_process"] = e.inspectParentProcessDetailsAsJson();
 		if (e.getJourney().getType() == SPAWN_THROUGH_PRELOADER) {
-			spec["diagnostics"]["preloader_process"] =
+			diagnostics["preloader_process"] =
 				e.inspectPreloaderProcessDetailsAsJson();
 		}
-		spec["diagnostics"]["subprocess"] = e.inspectSubprocessDetailsAsJson();
+		diagnostics["subprocess"] = e.inspectSubprocessDetailsAsJson();
 
-		string specContent = spec.toStyledString();
+		string specContent = json::serialize(spec);
 
 		params.set("CSS", cssContent);
 		params.set("JS", jsContent);

@@ -36,9 +36,6 @@
 	#include <selinux/selinux.h>
 #endif
 
-#include <boost/config.hpp>
-#include <boost/scoped_ptr.hpp>
-#include <boost/foreach.hpp>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -64,15 +61,18 @@
 
 #include <curl/curl.h>
 
+#include <boost/config.hpp>
+#include <boost/scoped_ptr.hpp>
+#include <boost/foreach.hpp>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/atomic.hpp>
+#include <boost/json.hpp>
 #include <oxt/thread.hpp>
 #include <oxt/system_calls.hpp>
 
 #include <ev++.h>
-#include <jsoncpp/json.h>
 
 #include <Shared/Fundamentals/Initialization.h>
 #include <Shared/ApiServerUtils.h>
@@ -92,6 +92,7 @@
 #include <Exceptions.h>
 #include <Utils.h>
 #include <Utils/Timer.h>
+#include <JsonTools/JsonUtils.h>
 #include <IOTools/MessageIO.h>
 #include <Core/OptionParser.h>
 #include <Core/Controller.h>
@@ -151,7 +152,7 @@ namespace Core {
 		SpawningKit::ContextPtr spawningKitContext;
 		ApplicationPool2::ContextPtr appPoolContext;
 		PoolPtr appPool;
-		Json::Value singleAppModeConfig;
+		json::value singleAppModeConfig;
 
 		ServerKit::AcceptLoadBalancer<Controller> loadBalancer;
 		vector<ThreadWorkingObjects> threadWorkingObjects;
@@ -241,11 +242,11 @@ initializePrivilegedWorkingObjects() {
 	TRACE_POINT();
 	WorkingObjects *wo = workingObjects = new WorkingObjects();
 
-	Json::Value password = coreConfig->get("controller_secure_headers_password");
-	if (password.isString()) {
-		wo->controllerSecureHeadersPassword = password.asString();
-	} else if (password.isObject()) {
-		wo->controllerSecureHeadersPassword = strip(unsafeReadFile(password["path"].asString()));
+	json::value password = coreConfig->get("controller_secure_headers_password");
+	if (password.is_string()) {
+		wo->controllerSecureHeadersPassword = jsonValueToString(password);
+	} else if (password.is_object()) {
+		wo->controllerSecureHeadersPassword = strip(unsafeReadFile(jsonValueToString(password.at("path"))));
 	}
 }
 
@@ -253,27 +254,27 @@ static void
 initializeSingleAppMode() {
 	TRACE_POINT();
 
-	if (coreConfig->get("multi_app").asBool()) {
+	if (coreConfig->get("multi_app").as_bool()) {
 		P_NOTICE(SHORT_PROGRAM_NAME " core running in multi-application mode.");
 		return;
 	}
 
 	WorkingObjects *wo = workingObjects;
 	string appType, startupFile, appStartCommand;
-	string appRoot = coreConfig->get("single_app_mode_app_root").asString();
+	string appRoot = jsonValueToString(coreConfig->get("single_app_mode_app_root"));
 
-	if (!coreConfig->get("single_app_mode_app_type").isNull()
-	 && !coreConfig->get("single_app_mode_app_start_command").isNull())
+	if (!coreConfig->get("single_app_mode_app_type").is_null()
+	 && !coreConfig->get("single_app_mode_app_start_command").is_null())
 	{
 		fprintf(stderr, "ERROR: it is not allowed for both --app-type and"
 			" --app-start-command to be set.\n");
 		exit(1);
 	}
 
-	if (!coreConfig->get("single_app_mode_app_start_command").isNull()) {
+	if (!coreConfig->get("single_app_mode_app_start_command").is_null()) {
 		// The config specified that this is a generic app or a Kuria app.
-		appStartCommand = coreConfig->get("single_app_mode_app_start_command").asString();
-	} else if (coreConfig->get("single_app_mode_app_type").isNull()) {
+		appStartCommand = jsonValueToString(coreConfig->get("single_app_mode_app_start_command"));
+	} else if (coreConfig->get("single_app_mode_app_type").is_null()) {
 		// Autodetect whether this is generic app, Kuria app or auto-supported app.
 		P_DEBUG("Autodetecting application type...");
 		AppTypeDetector::Detector detector(*coreWrapperRegistry);
@@ -284,7 +285,7 @@ initializeSingleAppMode() {
 			appStartCommand = detectorResult.appStartCommand;
 		} else {
 			// This is an auto-supported app.
-			if (coreConfig->get("single_app_mode_app_type").isNull()) {
+			if (coreConfig->get("single_app_mode_app_type").is_null()) {
 				if (detectorResult.isNull()) {
 					fprintf(stderr, "ERROR: unable to autodetect what kind of application "
 						"lives in %s. Please specify information about the app using "
@@ -296,16 +297,16 @@ initializeSingleAppMode() {
 				}
 				appType = detectorResult.wrapperRegistryEntry->language;
 			} else {
-				appType = coreConfig->get("single_app_mode_app_type").asString();
+				appType = jsonValueToString(coreConfig->get("single_app_mode_app_type"));
 			}
 		}
 	} else {
 		// This is an auto-supported app.
-		appType = coreConfig->get("single_app_mode_app_type").asString();
+		appType = jsonValueToString(coreConfig->get("single_app_mode_app_type"));
 	}
 
 	if (!appType.empty()) {
-		if (coreConfig->get("single_app_mode_startup_file").isNull()) {
+		if (coreConfig->get("single_app_mode_startup_file").is_null()) {
 			const WrapperRegistry::Entry &entry = coreWrapperRegistry->lookup(appType);
 			if (entry.defaultStartupFiles.empty()) {
 				startupFile = appRoot + "/";
@@ -313,7 +314,7 @@ initializeSingleAppMode() {
 				startupFile = appRoot + "/" + entry.defaultStartupFiles[0];
 			}
 		} else {
-			startupFile = coreConfig->get("single_app_mode_startup_file").asString();
+			startupFile = jsonValueToString(coreConfig->get("single_app_mode_startup_file"));
 		}
 		if (!fileExists(startupFile)) {
 			fprintf(stderr, "ERROR: unable to find expected startup file %s."
@@ -323,25 +324,26 @@ initializeSingleAppMode() {
 		}
 	}
 
-	wo->singleAppModeConfig["app_root"] = appRoot;
+	json::object &samc = wo->singleAppModeConfig.get_object();
+	samc["app_root"] = appRoot;
 
 	P_NOTICE(SHORT_PROGRAM_NAME " core running in single-application mode.");
 	P_NOTICE("Serving app      : " << appRoot);
 	if (!appType.empty()) {
 		P_NOTICE("App type         : " << appType);
 		P_NOTICE("App startup file : " << startupFile);
-		wo->singleAppModeConfig["app_type"] = appType;
-		wo->singleAppModeConfig["startup_file"] = startupFile;
+		samc["app_type"] = appType;
+		samc["startup_file"] = startupFile;
 	} else {
 		P_NOTICE("App start command: " << appStartCommand);
-		wo->singleAppModeConfig["app_start_command"] = appStartCommand;
+		samc["app_start_command"] = appStartCommand;
 	}
 }
 
 static void
 setUlimits() {
 	TRACE_POINT();
-	unsigned int number = coreConfig->get("file_descriptor_ulimit").asUInt();
+	unsigned int number = coreConfig->get("file_descriptor_ulimit").as_uint64();
 	if (number != 0) {
 		struct rlimit limit;
 		int ret;
@@ -450,9 +452,9 @@ static void
 startListening() {
 	TRACE_POINT();
 	WorkingObjects *wo = workingObjects;
-	const Json::Value addresses = coreConfig->get("controller_addresses");
-	const Json::Value apiAddresses = coreConfig->get("api_server_addresses");
-	Json::Value::const_iterator it;
+	const json::array &addresses = coreConfig->get("controller_addresses").get_array();
+	const json::array &apiAddresses = coreConfig->get("api_server_addresses").get_array();
+	json::array::const_iterator it, end = addresses.end();
 	unsigned int i;
 
 	#ifdef USE_SELINUX
@@ -461,33 +463,33 @@ startListening() {
 		setSelinuxSocketContext();
 	#endif
 
-	for (it = addresses.begin(), i = 0; it != addresses.end(); it++, i++) {
-		wo->serverFds[i] = createServer(it->asString(),
-			coreConfig->get("controller_socket_backlog").asUInt(), true,
+	for (it = addresses.begin(), i = 0; it != end; it++, i++) {
+		wo->serverFds[i] = createServer(it->as_string(),
+			coreConfig->get("controller_socket_backlog").as_uint64(), true,
 			__FILE__, __LINE__);
 		#ifdef USE_SELINUX
 			resetSelinuxSocketContext();
-			if (i == 0 && getSocketAddressType(it->asString()) == SAT_UNIX) {
+			if (i == 0 && getSocketAddressType(it->as_string()) == SAT_UNIX) {
 				// setSelinuxSocketContext() sets the context of the
 				// socket file descriptor but not the file on the filesystem.
 				// So we relabel the socket file here.
-				selinuxRelabelFile(parseUnixSocketAddress(it->asString()),
+				selinuxRelabelFile(parseUnixSocketAddress(it->as_string()),
 					"passenger_instance_httpd_socket_t");
 			}
 		#endif
 		P_LOG_FILE_DESCRIPTOR_PURPOSE(wo->serverFds[i],
-			"Server address: " << it->asString());
-		if (getSocketAddressType(it->asString()) == SAT_UNIX) {
-			makeFileWorldReadableAndWritable(parseUnixSocketAddress(it->asString()));
+			"Server address: " << it->as_string());
+		if (getSocketAddressType(it->as_string()) == SAT_UNIX) {
+			makeFileWorldReadableAndWritable(parseUnixSocketAddress(it->as_string()));
 		}
 	}
 	for (it = apiAddresses.begin(), i = 0; it != apiAddresses.end(); it++, i++) {
-		wo->apiServerFds[i] = createServer(it->asString(), 0, true,
+		wo->apiServerFds[i] = createServer(it->as_string(), 0, true,
 			__FILE__, __LINE__);
 		P_LOG_FILE_DESCRIPTOR_PURPOSE(wo->apiServerFds[i],
-			"ApiServer address: " << it->asString());
-		if (getSocketAddressType(it->asString()) == SAT_UNIX) {
-			makeFileWorldReadableAndWritable(parseUnixSocketAddress(it->asString()));
+			"ApiServer address: " << it->as_string());
+		if (getSocketAddressType(it->as_string()) == SAT_UNIX) {
+			makeFileWorldReadableAndWritable(parseUnixSocketAddress(it->as_string()));
 		}
 	}
 }
@@ -495,18 +497,18 @@ startListening() {
 static void
 createPidFile() {
 	TRACE_POINT();
-	Json::Value pidFile = coreConfig->get("pid_file");
-	if (!pidFile.isNull()) {
+	json::value pidFile = coreConfig->get("pid_file");
+	if (!pidFile.is_null()) {
 		char pidStr[32];
 
 		snprintf(pidStr, sizeof(pidStr), "%lld", (long long) getpid());
 
-		int fd = syscalls::open(pidFile.asCString(),
+		int fd = syscalls::open(pidFile.as_string().c_str(),
 			O_WRONLY | O_CREAT | O_TRUNC, 0644);
 		if (fd == -1) {
 			int e = errno;
 			throw FileSystemException("Cannot create PID file "
-				+ pidFile.asString(), e, pidFile.asString());
+				+ jsonValueToString(pidFile), e, jsonValueToString(pidFile));
 		}
 
 		UPDATE_TRACE_POINT();
@@ -527,12 +529,12 @@ printInfo(EV_P_ struct ev_signal *watcher, int revents) {
 
 static void
 inspectControllerStateAsJson(Controller *controller, string *result) {
-	*result = controller->inspectStateAsJson().toStyledString();
+	*result = json::serialize(controller->inspectStateAsJson());
 }
 
 static void
 inspectControllerConfigAsJson(Controller *controller, string *result) {
-	*result = controller->inspectConfig().toStyledString();
+	*result = json::serialize(controller->inspectConfig());
 }
 
 static void
@@ -692,12 +694,12 @@ initializeNonPrivilegedWorkingObjects() {
 	TRACE_POINT();
 	WorkingObjects *wo = workingObjects;
 
-	const Json::Value addresses = coreConfig->get("controller_addresses");
-	const Json::Value apiAddresses = coreConfig->get("api_server_addresses");
+	const json::array &addresses = coreConfig->get("controller_addresses").get_array();
+	const json::array &apiAddresses = coreConfig->get("api_server_addresses").get_array();
 
-	setenv("SERVER_SOFTWARE", coreConfig->get("server_software").asCString(), 1);
+	setenv("SERVER_SOFTWARE", coreConfig->get("server_software").as_string().c_str(), 1);
 
-	wo->resourceLocator = ResourceLocator(coreConfig->get("passenger_root").asString());
+	wo->resourceLocator = ResourceLocator(jsonValueToString(coreConfig->get("passenger_root")));
 
 	wo->randomGenerator = boost::make_shared<RandomGenerator>();
 	// Check whether /dev/urandom is actually random.
@@ -713,9 +715,9 @@ initializeNonPrivilegedWorkingObjects() {
 	wo->spawningKitContext->resourceLocator = &wo->resourceLocator;
 	wo->spawningKitContext->wrapperRegistry = coreWrapperRegistry;
 	wo->spawningKitContext->randomGenerator = wo->randomGenerator;
-	wo->spawningKitContext->integrationMode = coreConfig->get("integration_mode").asString();
-	wo->spawningKitContext->instanceDir = coreConfig->get("instance_dir").asString();
-	wo->spawningKitContext->spawnDir = coreConfig->get("spawn_dir").asString();
+	wo->spawningKitContext->integrationMode = jsonValueToString(coreConfig->get("integration_mode"));
+	wo->spawningKitContext->instanceDir = jsonValueToString(coreConfig->get("instance_dir"));
+	wo->spawningKitContext->spawnDir = jsonValueToString(coreConfig->get("spawn_dir"));
 	if (!wo->spawningKitContext->instanceDir.empty()) {
 		wo->spawningKitContext->instanceDir = absolutizePath(
 			wo->spawningKitContext->instanceDir);
@@ -730,23 +732,23 @@ initializeNonPrivilegedWorkingObjects() {
 	wo->appPoolContext->finalize();
 	wo->appPool = boost::make_shared<Pool>(wo->appPoolContext.get());
 	wo->appPool->initialize();
-	wo->appPool->setMax(coreConfig->get("max_pool_size").asInt());
-	wo->appPool->setMaxIdleTime(coreConfig->get("pool_idle_time").asInt() * 1000000ULL);
-	wo->appPool->enableSelfChecking(coreConfig->get("pool_selfchecks").asBool());
+	wo->appPool->setMax(coreConfig->get("max_pool_size").as_int64());
+	wo->appPool->setMaxIdleTime(coreConfig->get("pool_idle_time").as_int64() * 1000000ULL);
+	wo->appPool->enableSelfChecking(coreConfig->get("pool_selfchecks").as_bool());
 	wo->appPool->abortLongRunningConnectionsCallback = abortLongRunningConnections;
 
 	UPDATE_TRACE_POINT();
-	unsigned int nthreads = coreConfig->get("controller_threads").asUInt();
+	unsigned int nthreads = coreConfig->get("controller_threads").as_uint64();
 	BackgroundEventLoop *firstLoop = NULL; // Avoid compiler warning
 	wo->threadWorkingObjects.reserve(nthreads);
 	for (unsigned int i = 0; i < nthreads; i++) {
 		UPDATE_TRACE_POINT();
 		ThreadWorkingObjects two;
 
-		Json::Value contextConfig = coreConfig->inspectEffectiveValues();
+		json::object contextConfig = coreConfig->inspectEffectiveValues();
 		contextConfig["secure_mode_password"] = wo->controllerSecureHeadersPassword;
 
-		Json::Value controllerConfig = coreConfig->inspectEffectiveValues();
+		json::object controllerConfig = coreConfig->inspectEffectiveValues();
 		controllerConfig["thread_number"] = i + 1;
 
 		if (i == 0) {
@@ -770,7 +772,7 @@ initializeNonPrivilegedWorkingObjects() {
 			controllerConfig,
 			coreSchema->controller.translator,
 			&coreSchema->controllerSingleAppMode.schema,
-			&wo->singleAppModeConfig,
+			wo->singleAppModeConfig.if_object(),
 			coreSchema->controllerSingleAppMode.translator);
 		two.controller->resourceLocator = &wo->resourceLocator;
 		two.controller->wrapperRegistry = coreWrapperRegistry;
@@ -795,7 +797,7 @@ initializeNonPrivilegedWorkingObjects() {
 		UPDATE_TRACE_POINT();
 		ApiWorkingObjects *awo = &wo->apiWorkingObjects;
 
-		Json::Value contextConfig = coreConfig->inspectEffectiveValues();
+		json::object contextConfig = coreConfig->inspectEffectiveValues();
 
 		awo->bgloop = new BackgroundEventLoop(true, true);
 		awo->serverKitContext = new ServerKit::Context(
@@ -858,16 +860,16 @@ initializeNonPrivilegedWorkingObjects() {
 static void
 initializeSecurityUpdateChecker() {
 	TRACE_POINT();
-	Json::Value config = coreConfig->inspectEffectiveValues();
+	json::object config = coreConfig->inspectEffectiveValues();
 
 	// nginx / apache / standalone
-	string serverIdentifier = coreConfig->get("integration_mode").asString();
+	json::string serverIdentifier = coreConfig->get("integration_mode").as_string();
 	// nginx / builtin
-	if (!coreConfig->get("standalone_engine").isNull()) {
+	if (!coreConfig->get("standalone_engine").is_null()) {
 		serverIdentifier.append(" ");
-		serverIdentifier.append(coreConfig->get("standalone_engine").asString());
+		serverIdentifier.append(coreConfig->get("standalone_engine").as_string());
 	}
-	if (coreConfig->get("server_software").asString().find(FLYING_PASSENGER_NAME) != string::npos) {
+	if (coreConfig->get("server_software").as_string().find(FLYING_PASSENGER_NAME) != string::npos) {
 		serverIdentifier.append(" flying");
 	}
 	config["server_identifier"] = serverIdentifier;
@@ -887,7 +889,7 @@ initializeTelemetryCollector() {
 	TRACE_POINT();
 	WorkingObjects &wo = *workingObjects;
 
-	Json::Value config = coreConfig->inspectEffectiveValues();
+	json::value config = coreConfig->inspectEffectiveValues();
 	TelemetryCollector *collector = new TelemetryCollector(
 		coreSchema->telemetryCollector.schema,
 		coreConfig->inspectEffectiveValues(),
@@ -914,16 +916,17 @@ initializeAdminPanelConnector() {
 	TRACE_POINT();
 	WorkingObjects &wo = *workingObjects;
 
-	if (coreConfig->get("admin_panel_url").empty()) {
+	const json::value &apu =coreConfig->get("admin_panel_url");
+	if (apu.is_null() || (apu.is_string() && apu.get_string().empty())) {
 		return;
 	}
 
-	Json::Value config = coreConfig->inspectEffectiveValues();
+	json::object config = coreConfig->inspectEffectiveValues();
 	config["log_prefix"] = "AdminPanelConnector: ";
 	config["ruby"] = config["default_ruby"];
 
 	P_NOTICE("Initialize connection with " << PROGRAM_NAME " admin panel at "
-		<< config["admin_panel_url"].asString());
+		<< config["admin_panel_url"].as_string());
 	AdminPanelConnector *connector = new Core::AdminPanelConnector(
 		coreSchema->adminPanelConnector.schema, config,
 		coreSchema->adminPanelConnector.translator);
@@ -947,17 +950,17 @@ prestartWebApps() {
 	TRACE_POINT();
 	WorkingObjects *wo = workingObjects;
 	vector<string> prestartURLs;
-	const Json::Value jPrestartURLs = coreConfig->get("prestart_urls");
-	Json::Value::const_iterator it, end = jPrestartURLs.end();
+	const json::array &jPrestartURLs = coreConfig->get("prestart_urls").get_array();
+	json::array::const_iterator it, end = jPrestartURLs.end();
 
 	prestartURLs.reserve(jPrestartURLs.size());
 	for (it = jPrestartURLs.begin(); it != end; it++) {
-		prestartURLs.push_back(it->asString());
+		prestartURLs.push_back(jsonValueToString(*it));
 	}
 
 	boost::function<void ()> func = boost::bind(prestartWebApps,
 		wo->resourceLocator,
-		coreConfig->get("default_ruby").asString(),
+		jsonValueToString(coreConfig->get("default_ruby")),
 		prestartURLs
 	);
 	wo->prestarterThread = new oxt::thread(
@@ -1018,14 +1021,14 @@ reportInitializationInfo() {
 			"initialized",
 			NULL);
 	} else {
-		const Json::Value addresses = coreConfig->get("controller_addresses");
-		const Json::Value apiAddresses = coreConfig->get("api_server_addresses");
-		Json::Value::const_iterator it;
+		const json::array &addresses = coreConfig->get("controller_addresses").get_array();
+		const json::array &apiAddresses = coreConfig->get("api_server_addresses").get_array();
+		json::array::const_iterator it, end = addresses.end();
 
 		P_NOTICE(SHORT_PROGRAM_NAME " core online, PID " << getpid() <<
 			", listening on " << addresses.size() << " socket(s):");
-		for (it = addresses.begin(); it != addresses.end(); it++) {
-			string address = it->asString();
+		for (it = addresses.begin(); it != end; it++) {
+			json::string address = it->as_string();
 			if (startsWith(address, "tcp://")) {
 				address.erase(0, sizeof("tcp://") - 1);
 				address.insert(0, "http://");
@@ -1037,7 +1040,7 @@ reportInitializationInfo() {
 		if (!apiAddresses.empty()) {
 			P_NOTICE("API server listening on " << apiAddresses.size() << " socket(s):");
 			for (it = apiAddresses.begin(); it != apiAddresses.end(); it++) {
-				string address = it->asString();
+				json::string address = it->as_string();
 				if (startsWith(address, "tcp://")) {
 					address.erase(0, sizeof("tcp://") - 1);
 					address.insert(0, "http://");
@@ -1297,7 +1300,7 @@ cleanup() {
 		wo->apiWorkingObjects.bgloop->stop();
 	}
 	if (wo->telemetryCollector != NULL
-	&& !coreConfig->get("telemetry_collector_disabled").asBool())
+	&& !coreConfig->get("telemetry_collector_disabled").as_bool())
 	{
 		wo->telemetryCollector->runOneCycle(true);
 	}
@@ -1329,9 +1332,9 @@ cleanup() {
 static void
 deletePidFile() {
 	TRACE_POINT();
-	Json::Value pidFile = coreConfig->get("pid_file");
-	if (!pidFile.isNull()) {
-		syscalls::unlink(pidFile.asCString());
+	json::value pidFile = coreConfig->get("pid_file");
+	if (!pidFile.is_null()) {
+		syscalls::unlink(pidFile.as_string().c_str());
 	}
 }
 
@@ -1384,7 +1387,7 @@ runCore() {
 static void
 parseOptions(int argc, const char *argv[], ConfigKit::Store &config) {
 	OptionParser p(coreUsage);
-	Json::Value updates(Json::objectValue);
+	json::object updates;
 	int i = 2;
 
 	while (i < argc) {
@@ -1405,13 +1408,13 @@ parseOptions(int argc, const char *argv[], ConfigKit::Store &config) {
 		if (!config.update(updates, errors)) {
 			P_BUG("Unable to set initial configuration: " <<
 				ConfigKit::toString(errors) << "\n"
-				"Raw initial configuration: " << updates.toStyledString());
+				  "Raw initial configuration: " << json::serialize(updates));
 		}
 	}
 }
 
 static void
-loggingKitPreInitFunc(Json::Value &loggingKitInitialConfig) {
+loggingKitPreInitFunc(json::value &loggingKitInitialConfig) {
 	loggingKitInitialConfig = manipulateLoggingKitConfig(*coreConfig,
 		loggingKitInitialConfig);
 }
@@ -1429,7 +1432,7 @@ coreMain(int argc, char *argv[]) {
 		parseOptions, loggingKitPreInitFunc, 2);
 
 #if !BOOST_OS_MACOS
-	restoreOomScore(coreConfig->get("oom_score").asString());
+	restoreOomScore(coreConfig->get("oom_score").as_string());
 #endif
 
 	ret = runCore();

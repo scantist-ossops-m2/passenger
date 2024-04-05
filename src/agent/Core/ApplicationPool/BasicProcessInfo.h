@@ -29,7 +29,7 @@
 #include <sys/types.h>
 #include <cstring>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <StaticString.h>
 #include <Exceptions.h>
@@ -89,7 +89,7 @@ public:
 
 
 	BasicProcessInfo(Process *_process, const BasicGroupInfo *_groupInfo,
-		const Json::Value &json)
+		const json::value &json)
 		: process(_process),
 		  groupInfo(_groupInfo),
 		  pid(getJsonIntField(json, "pid"))

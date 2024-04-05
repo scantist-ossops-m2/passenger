@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 #include <boost/scoped_ptr.hpp>
+#include <boost/json.hpp>
 #include <boost/thread.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/foreach.hpp>
@@ -47,14 +48,13 @@
 #include <Core/Controller.h>
 #include <ProcessManagement/Ruby.h>
 #include <FileTools/FileManip.h>
+#include <JsonTools/JsonUtils.h>
 #include <SystemTools/UserDatabase.h>
 #include <Utils.h>
 #include <StrIntTools/StrIntUtils.h>
 #include <IOTools/IOUtils.h>
 #include <Utils/AsyncSignalSafeUtils.h>
 #include <LoggingKit/Context.h>
-
-#include <jsoncpp/json.h>
 
 namespace Passenger {
 namespace Core {
@@ -122,26 +122,26 @@ public:
 
 	typedef WebSocketCommandReverseServer::ConnectionPtr ConnectionPtr;
 	typedef WebSocketCommandReverseServer::MessagePtr MessagePtr;
-	typedef boost::function<Json::Value (void)> ConfigGetter;
+	typedef boost::function<json::value (void)> ConfigGetter;
 	typedef vector<Controller*> Controllers;
 
 private:
 	WebSocketCommandReverseServer server;
 	dynamic_thread_group threads;
-	Json::Value globalPropertiesFromInstanceDir;
+	json::object globalPropertiesFromInstanceDir;
 
 	bool onMessage(WebSocketCommandReverseServer *server,
 		const ConnectionPtr &conn, const MessagePtr &msg)
 	{
-		Json::Value doc;
+		json::object doc;
 
 		try {
-			doc = parseAndBasicValidateMessageAsJSON(msg->get_payload());
+			doc = parseAndBasicValidateMessageAsJSON(msg->get_payload()).get_object();
 		} catch (const RuntimeException &e) {
-			Json::Value reply;
+			json::object reply;
 			reply["result"] = "error";
 			reply["request_id"] = doc["request_id"];
-			reply["data"]["message"] = e.what();
+			reply["data"].at("message") = e.what();
 			sendJsonReply(conn, reply);
 			return true;
 		}
@@ -154,8 +154,8 @@ private:
 	}
 
 
-	bool onGetMessage(const ConnectionPtr &conn, const Json::Value &doc) {
-		const string resource = doc["resource"].asString();
+	bool onGetMessage(const ConnectionPtr &conn, const json::value &doc) {
+		const json::string resource = doc.at("resource").as_string();
 
 		if (resource == "server_properties") {
 			return onGetServerProperties(conn, doc);
@@ -176,16 +176,16 @@ private:
 		}
 	}
 
-	bool onGetServerProperties(const ConnectionPtr &conn, const Json::Value &doc) {
+	bool onGetServerProperties(const ConnectionPtr &conn, const json::value &doc) {
 		threads.create_thread(
 			boost::bind(&AdminPanelConnector::onGetServerPropertiesBgJob, this,
-				conn, doc, server.getConfig()["ruby"].asString()),
+						conn, doc, jsonValueToString(server.getConfig()["ruby"])),
 			"AdminPanelCommandServer: get_server_properties background job",
 			128 * 1024);
 		return false;
 	}
 
-	void onGetServerPropertiesBgJob(const ConnectionPtr &conn, const Json::Value &doc,
+	void onGetServerPropertiesBgJob(const ConnectionPtr &conn, const json::value &doc,
 		const string &ruby)
 	{
 		vector<string> args;
@@ -210,67 +210,72 @@ private:
 		));
 	}
 
-	void onGetServerPropertiesDone(const ConnectionPtr &conn, const Json::Value &doc,
+	void onGetServerPropertiesDone(const ConnectionPtr &conn, const json::value &doc,
 		const string output, int status, const string &error)
 	{
-		Json::Value reply;
-		reply["request_id"] = doc["request_id"];
+		json::object reply;
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
+		reply["request_id"] = doc.at("request_id");
 		if (error.empty()) {
 			if (status == 0 || status == -1) {
-				Json::Reader reader;
-				Json::Value dataDoc;
-
 				if (output.empty()) {
 					reply["result"] = "error";
-					reply["data"]["message"] = "Error parsing internal helper tool output";
+					reply_data["message"] = "Error parsing internal helper tool output";
 					P_ERROR(getLogPrefix() << "Error parsing internal helper tool output.\n" <<
-						"Raw data: \"\"");
-				} else if (reader.parse(output, dataDoc)) {
-					reply["result"] = "ok";
-					reply["data"] = dataDoc;
+							"Raw data: \"\"");
 				} else {
-					reply["result"] = "error";
-					reply["data"]["message"] = "Error parsing internal helper tool output";
-					P_ERROR(getLogPrefix() << "Error parsing internal helper tool output.\n" <<
-						"Error: " << reader.getFormattedErrorMessages() << "\n"
-						"Raw data: \"" << cEscapeString(output) << "\"");
+					error_code ec;
+					json::value dataDoc = json::parse(output, ec);
+					if (!ec) {
+						reply["result"] = "ok";
+						reply_data = dataDoc.get_object();
+					} else {
+						reply["result"] = "error";
+						reply_data["message"] = "Error parsing internal helper tool output";
+						P_ERROR(getLogPrefix() << "Error parsing internal helper tool output.\n" <<
+								"Error: " << ec.message() << "\n"
+								"Raw data: \"" << cEscapeString(output) << "\"");
+					}
 				}
 			} else {
 				int exitStatus = WEXITSTATUS(status);
 				reply["result"] = "error";
-				reply["data"]["message"] = "Internal helper tool exited with status "
+				reply_data["message"] = "Internal helper tool exited with status "
 					+ toString(exitStatus);
 				P_ERROR(getLogPrefix() << "Internal helper tool exited with status "
 					<< exitStatus << ". Raw output: \"" << cEscapeString(output) << "\"");
 			}
 		} else {
 			reply["result"] = "error";
-			reply["data"]["message"] = error;
+			reply_data["message"] = error;
 		}
 		sendJsonReply(conn, reply);
 		server.doneReplying(conn);
 	}
 
-	bool onGetGlobalProperties(const ConnectionPtr &conn, const Json::Value &doc) {
+	bool onGetGlobalProperties(const ConnectionPtr &conn, const json::value &doc) {
 		const ConfigKit::Store &config = server.getConfig();
-		Json::Value reply, data;
+		json::object reply, data;
 		reply["result"] = "ok";
-		reply["request_id"] = doc["request_id"];
+		reply["request_id"] = doc.at("request_id");
 
 		data = globalPropertiesFromInstanceDir;
 		data["version"] = PASSENGER_VERSION;
-		data["core_pid"] = Json::UInt(getpid());
+		data["core_pid"] = uint64_t(getpid());
 
-		string integrationMode = config["integration_mode"].asString();
-		data["integration_mode"]["name"] = integrationMode;
-		if (!config["web_server_module_version"].isNull()) {
-			data["integration_mode"]["web_server_module_version"] = config["web_server_module_version"];
+		json::string integrationMode = config["integration_mode"].as_string();
+		data["integration_mode"] = json::object();
+		json::object &data_integration_mode = data["integration_mode"].get_object();
+		data_integration_mode["name"] = integrationMode;
+		if (!config["web_server_module_version"].is_null()) {
+			data_integration_mode["web_server_module_version"] = config["web_server_module_version"];
 		}
 		if (integrationMode == "standalone") {
-			data["integration_mode"]["standalone_engine"] = config["standalone_engine"];
+			data_integration_mode["standalone_engine"] = config["standalone_engine"];
 		}
-		if (!config["web_server_version"].isNull()) {
-			data["integration_mode"]["web_server_version"] = config["web_server_version"];
+		if (!config["web_server_version"].is_null()) {
+			data_integration_mode["web_server_version"] = config["web_server_version"];
 		}
 
 		data["originally_packaged"] = resourceLocator->isOriginallyPackaged();
@@ -283,7 +288,7 @@ private:
 		return true;
 	}
 
-	bool onGetGlobalConfiguration(const ConnectionPtr &conn, const Json::Value &doc) {
+	bool onGetGlobalConfiguration(const ConnectionPtr &conn, const json::value &doc) {
 		threads.create_thread(
 			boost::bind(&AdminPanelConnector::onGetGlobalConfigurationBgJob, this,
 				conn, doc),
@@ -292,58 +297,66 @@ private:
 		return false;
 	}
 
-	void onGetGlobalConfigurationBgJob(const ConnectionPtr &conn, const Json::Value &input) {
-		Json::Value globalConfig = configGetter()["config_manifest"]["effective_value"]["global_configuration"];
+	void onGetGlobalConfigurationBgJob(const ConnectionPtr &conn, const json::value &input) {
+		json::value &&globalConfig = configGetter().at_pointer("/config_manifest/effective_value/global_configuration");
 		server.getIoService().post(boost::bind(
 			&AdminPanelConnector::onGetGlobalConfigDone, this,
 			conn, input, globalConfig
 		));
 	}
 
-	void onGetGlobalConfigDone(const ConnectionPtr &conn, const Json::Value &input,
-		Json::Value config)
+	void onGetGlobalConfigDone(const ConnectionPtr &conn, const json::value &input,
+		json::value config)
 	{
-		Json::Value reply;
+		json::object reply;
 
 		reply["result"] = "ok";
-		reply["request_id"] = input["request_id"];
-		reply["data"]["options"] = config;
+		reply["request_id"] = input.at("request_id");
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
+		reply_data["options"] = config;
 
 		sendJsonReply(conn, reply);
 		server.doneReplying(conn);
 	}
 
-	bool onGetGlobalStatistics(const ConnectionPtr &conn, const Json::Value &doc) {
-		Json::Value reply;
+	bool onGetGlobalStatistics(const ConnectionPtr &conn, const json::value &doc) {
+		json::object reply;
 		reply["result"] = "ok";
-		reply["request_id"] = doc["request_id"];
-		reply["data"]["message"] = Json::arrayValue;
+		reply["request_id"] = doc.at("request_id");
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
+		reply_data["message"] = json::array();
+		json::array &reply_data_message = reply_data["message"].get_array();
 
 		for (unsigned int i = 0; i < controllers.size(); i++) {
-			reply["data"]["message"].append(controllers[i]->inspectStateAsJson());
+			reply_data_message.push_back(controllers[i]->inspectStateAsJson());
 		}
 
 		sendJsonReply(conn, reply);
 		return true;
 	}
 
-	bool onGetApplicationProperties(const ConnectionPtr &conn, const Json::Value &doc) {
+	bool onGetApplicationProperties(const ConnectionPtr &conn, const json::value &vdoc) {
 		ConfigKit::Schema argumentsSchema =
 			ApplicationPool2::Pool::ToJsonOptions::createSchema();
-		Json::Value args(Json::objectValue), reply;
+		json::object args, reply;
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
+		const json::object &doc = vdoc.get_object();
 		ApplicationPool2::Pool::ToJsonOptions inspectOptions =
 			ApplicationPool2::Pool::ToJsonOptions::makeAuthorized();
 
-		if (doc.isMember("arguments")) {
+		if (doc.contains("arguments")) {
 			ConfigKit::Store store(argumentsSchema);
 			vector<ConfigKit::Error> errors;
 
-			if (store.update(doc["arguments"], errors)) {
+			if (store.update(doc.at("arguments"), errors)) {
 				inspectOptions.set(store.inspectEffectiveValues());
 			} else {
 				reply["result"] = "error";
-				reply["request_id"] = doc["request_id"];
-				reply["data"]["message"] = "Invalid arguments: " +
+				reply["request_id"] = doc.at("request_id");
+				reply_data["message"] = "Invalid arguments: " +
 					ConfigKit::toString(errors);
 				sendJsonReply(conn, reply);
 				return true;
@@ -351,70 +364,72 @@ private:
 		}
 
 		reply["result"] = "ok";
-		reply["request_id"] = doc["request_id"];
-		reply["data"]["applications"] = appPool->inspectPropertiesInAdminPanelFormat(
+		reply["request_id"] = doc.at("request_id");
+		reply_data["applications"] = appPool->inspectPropertiesInAdminPanelFormat(
 			inspectOptions);
 		sendJsonReply(conn, reply);
 		return true;
 	}
 
-	static void modifyEnvironmentVariables(Json::Value &option) {
-		Json::Value::iterator it;
-		for (it = option.begin(); it != option.end(); it++) {
-			Json::Value &suboption = *it;
-			suboption["value"] = suboption["value"].toStyledString();
+	static void modifyEnvironmentVariables(json::value &option) {
+		json::array::iterator it;
+		for (it = option.get_array().begin(); it != option.get_array().end(); it++) {
+			json::object &suboption = it->get_object();
+			suboption["value"] = json::serialize(suboption["value"]);
 		}
 	}
 
-	bool onGetApplicationConfig(const ConnectionPtr &conn, const Json::Value &doc) {
-		Json::Value appConfigsContainer = configGetter()["config_manifest"]
-			["effective_value"]["application_configurations"];
-		Json::Value appConfigsContainerOutput;
-		Json::Value reply;
+	bool onGetApplicationConfig(const ConnectionPtr &conn, const json::value &vdoc) {
+		error_code ec;
+		json::value &&appConfigsContainer = configGetter().at_pointer("/config_manifest/effective_value/application_configurations");
+		json::value appConfigsContainerOutput;
+		json::object reply;
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
+		const json::object &doc = vdoc.get_object();
 
-		if (doc.isMember("arguments")) {
+		if (doc.contains("arguments")) {
 			ConfigKit::Schema argumentsSchema =
 				ApplicationPool2::Pool::ToJsonOptions::createSchema();
 			ConfigKit::Store store(argumentsSchema);
 			vector<ConfigKit::Error> errors;
 
-			if (!store.update(doc["arguments"], errors)) {
+			if (!store.update(doc.at("arguments"), errors)) {
 				reply["result"] = "error";
-				reply["request_id"] = doc["request_id"];
-				reply["data"]["message"] = "Invalid arguments: " +
+				reply["request_id"] = doc.at("request_id");
+				reply_data["message"] = "Invalid arguments: " +
 					ConfigKit::toString(errors);
 				sendJsonReply(conn, reply);
 				return true;
 			}
 
-			Json::Value allowedApplicationIds =
+			json::value allowedApplicationIds =
 				store.inspectEffectiveValues()["application_ids"];
-			if (allowedApplicationIds.isNull()) {
+			if (allowedApplicationIds.is_null()) {
 				appConfigsContainerOutput = appConfigsContainer;
 			} else {
 				appConfigsContainerOutput = filterJsonObject(
-					appConfigsContainer,
-					allowedApplicationIds);
+					appConfigsContainer.get_object(),
+					allowedApplicationIds.get_array());
 			}
 		} else {
 			appConfigsContainerOutput = appConfigsContainer;
 		}
 
 		reply["result"] = "ok";
-		reply["request_id"] = doc["request_id"];
-		reply["data"]["options"] = appConfigsContainerOutput;
-
+		reply["request_id"] = doc.at("request_id");
+		reply_data["options"] = appConfigsContainerOutput;
 		sendJsonReply(conn, reply);
 		return true;
 	}
 
 	void addWatchedFiles() {
-		Json::Value appConfigs = configGetter()["config_manifest"]["effective_value"]["application_configurations"];
+		json::value &&vappConfigs = configGetter().at_pointer("/config_manifest/effective_value/application_configurations");
 
 		// As a hack, we look up the watched files config (passenger monitor log file) in the manifest. The manifest
 		// is meant for users, which means that key names depend on the integration mode. In the future when
 		// component configuration more routed through ConfigKit we can get rid of the hack.
-		string integrationMode = server.getConfig()["integration_mode"].asString();
+		json::string integrationMode = server.getConfig()["integration_mode"].as_string();
 		string passengerMonitorLogFile;
 		string passengerAppRoot;
 		if (integrationMode == "apache") {
@@ -426,21 +441,24 @@ private:
 			// TODO: this probably doesn't give any results with the builtin engine (not supported in other places either)
 		}
 
-		foreach (HashedStaticString key, appConfigs.getMemberNames()) {
-			Json::Value files = appConfigs[key]["options"][passengerMonitorLogFile]["value_hierarchy"][0]["value"];
-			string appRoot = appConfigs[key]["options"][passengerAppRoot]["value_hierarchy"][0]["value"].asString();
+		json::object &appConfigs = vappConfigs.get_object();
+		json::object::const_iterator it, end = appConfigs.end();
+		for (it=appConfigs.begin(); it != end; it++) {
+			HashedStaticString key = it->key();
+			json::value files = it->value().at_pointer("/options/" + passengerMonitorLogFile + "/value_hierarchy/0/value");
+			json::string appRoot = it->value().at_pointer("/options/" + passengerAppRoot + "/value_hierarchy/0/value").get_string();
 
 			pair<uid_t, gid_t> ids;
 			try {
 				ids = appPool->getGroupRunUidAndGids(key);
 			} catch (const RuntimeException &) {
-				files = Json::nullValue;
+				files = json::value(nullptr);
 			}
-			if (!files.isNull()) {
+			if (!files.is_null()) {
 				string usernameOrUid = lookupSystemUsernameByUid(ids.first, true);
 
-				foreach (Json::Value file, files) {
-					string f = file.asString();
+				foreach (json::value file, files.get_array()) {
+					json::string f = file.as_string();
 					string maxLines = toString(LOG_MONITORING_MAX_LINES);
 					Pipe pipe = createPipe(__FILE__, __LINE__);
 					string agentExe = resourceLocator->findSupportBinary(AGENT_EXE);
@@ -501,99 +519,106 @@ private:
 		}
 	}
 
-	bool onGetApplicationLogs(const ConnectionPtr &conn, const Json::Value &doc) {
-		Json::Value reply;
+	bool onGetApplicationLogs(const ConnectionPtr &conn, const json::value &doc) {
+		json::object reply;
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
 		reply["result"] = "ok";
-		reply["request_id"] = doc["request_id"];
+		reply["request_id"] = doc.at("request_id");
 
 		addWatchedFiles();
 
-		reply["data"]["logs"] = LoggingKit::context->convertLog();
+		reply_data["logs"] = LoggingKit::context->convertLog();
 		sendJsonReply(conn, reply);
 		return true;
 	}
 
-	bool onUnknownResource(const ConnectionPtr &conn, const Json::Value &doc) {
-		Json::Value reply;
+	bool onUnknownResource(const ConnectionPtr &conn, const json::value &doc) {
+		json::object reply;
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
 		reply["result"] = "error";
-		reply["request_id"] = doc["request_id"];
-		reply["data"]["message"] = "Unknown resource '" + doc["resource"].asString() + "'";
+		reply["request_id"] = doc.at("request_id");
+		reply_data["message"] = "Unknown resource '" + getJsonStringField(doc, "resource") + "'";
 		sendJsonReply(conn, reply);
 		return true;
 	}
 
-	bool onUnknownMessageAction(const ConnectionPtr &conn, const Json::Value &doc) {
-		Json::Value reply;
+	bool onUnknownMessageAction(const ConnectionPtr &conn, const json::value &doc) {
+		json::object reply;
+		reply["data"] = json::object();
+		json::object &reply_data = reply["data"].get_object();
 		reply["result"] = "error";
-		reply["request_id"] = doc["request_id"];
-		reply["data"]["message"] = "Unknown action '" + doc["action"].asString() + "'";
+		reply["request_id"] = doc.at("request_id");
+		reply_data["message"] = "Unknown action '" + getJsonStringField(doc,"action") + "'";
 		sendJsonReply(conn, reply);
 		return true;
 	}
 
 
-	Json::Value parseAndBasicValidateMessageAsJSON(const string &msg) const {
-		Json::Value doc;
-		Json::Reader reader;
-		if (!reader.parse(msg, doc)) {
+	json::value parseAndBasicValidateMessageAsJSON(const string &msg) const {
+		error_code ec;
+		json::value vdoc = json::parse(msg, ec);
+
+		if (ec) {
 			throw RuntimeException("Error parsing command JSON document: "
-				+ reader.getFormattedErrorMessages());
+				+ ec.message());
 		}
 
-		if (!doc.isObject()) {
+		if (!vdoc.is_object()) {
 			throw RuntimeException("Invalid command JSON document: must be an object");
 		}
-		if (!doc.isMember("action")) {
+		json::object &doc = vdoc.get_object();
+		if (!doc.contains("action")) {
 			throw RuntimeException("Invalid command JSON document: missing 'action' key");
 		}
-		if (!doc["action"].isString()) {
+		if (!doc["action"].is_string()) {
 			throw RuntimeException("Invalid command JSON document: the 'action' key must be a string");
 		}
-		if (!doc.isMember("request_id")) {
+		if (!doc.contains("request_id")) {
 			throw RuntimeException("Invalid command JSON document: missing 'request_id' key");
 		}
-		if (!doc.isMember("resource")) {
+		if (!doc.contains("resource")) {
 			throw RuntimeException("Invalid command JSON document: missing 'resource' key");
 		}
-		if (!doc["resource"].isString()) {
+		if (!doc["resource"].is_string()) {
 			throw RuntimeException("Invalid command JSON document: the 'resource' key must be a string");
 		}
-		if (doc.isMember("arguments") && !doc["arguments"].isObject()) {
+		if (doc.contains("arguments") && !doc["arguments"].is_object()) {
 			throw RuntimeException("Invalid command JSON document: the 'arguments' key, when present, must be an object");
 		}
 
 		return doc;
 	}
 
-	void sendJsonReply(const ConnectionPtr &conn, const Json::Value &doc) {
-		Json::FastWriter writer;
-		string str = writer.write(doc);
+	void sendJsonReply(const ConnectionPtr &conn, const json::value &doc) {
+		string str = json::serialize(doc);
 		WCRS_DEBUG_FRAME(&server, "Replying with:", str);
 		conn->send(str);
 	}
 
 	void readInstanceDirProperties(const string &instanceDir) {
-		Json::Value doc;
-		Json::Reader reader;
+		error_code ec;
+		json::value doc = json::parse(unsafeReadFile(instanceDir + "/properties.json"), ec);
 
-		if (!reader.parse(unsafeReadFile(instanceDir + "/properties.json"), doc)) {
+		if (ec) {
 			throw RuntimeException("Cannot parse " + instanceDir + "/properties.json: "
-				+ reader.getFormattedErrorMessages());
+				+ ec.message());
 		}
 
-		globalPropertiesFromInstanceDir["instance_id"] = doc["instance_id"];
-		globalPropertiesFromInstanceDir["watchdog_pid"] = doc["watchdog_pid"];
+		globalPropertiesFromInstanceDir["instance_id"] = doc.at("instance_id");
+		globalPropertiesFromInstanceDir["watchdog_pid"] = doc.at("watchdog_pid");
 	}
 
-	Json::Value filterJsonObject(const Json::Value &object,
-		const Json::Value &allowedKeys) const
+	json::value filterJsonObject(const json::object &object,
+		const json::array &allowedKeys) const
 	{
-		Json::Value::const_iterator it, end = allowedKeys.end();
-		Json::Value result(Json::objectValue);
+		json::array::const_iterator it, end = allowedKeys.end();
+		json::object result;
 
 		for (it = allowedKeys.begin(); it != end; it++) {
-			if (object.isMember(it->asString())) {
-				result[it->asString()] = object[it->asString()];
+			if (object.contains(it->as_string())) {
+				result[it->as_string()] = object.at(it->as_string());
 			}
 		}
 
@@ -606,7 +631,7 @@ private:
 	}
 
 	string getLogPrefix() const {
-		return server.getConfig()["log_prefix"].asString();
+		return jsonValueToString(server.getConfig()["log_prefix"]);
 	}
 
 	WebSocketCommandReverseServer::MessageHandler createMessageFunctor() {
@@ -624,13 +649,15 @@ public:
 	Controllers controllers;
 
 
-	AdminPanelConnector(const Schema &schema, const Json::Value &config,
+	AdminPanelConnector(const Schema &schema, const json::value &config,
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: server(schema, createMessageFunctor(), config, translator),
 		  resourceLocator(NULL)
 	{
-		if (!config["instance_dir"].isNull()) {
-			readInstanceDirProperties(config["instance_dir"].asString());
+		if (config.get_object().contains("instance_dir") &&
+			config.at("instance_dir").is_string() &&
+			!config.at("instance_dir").get_string().empty()) {
+			readInstanceDirProperties(getJsonStringField(config,"instance_dir"));
 		} else {
 			initializePropertiesWithoutInstanceDir();
 		}
@@ -653,7 +680,7 @@ public:
 		server.run();
 	}
 
-	void asyncPrepareConfigChange(const Json::Value &updates,
+	void asyncPrepareConfigChange(const json::value &updates,
 		ConfigChangeRequest &req,
 		const ConfigKit::CallbackTypes<WebSocketCommandReverseServer>::PrepareConfigChange &callback)
 	{

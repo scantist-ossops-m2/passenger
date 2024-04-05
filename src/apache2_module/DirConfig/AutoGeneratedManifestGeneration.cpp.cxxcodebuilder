@@ -75,8 +75,8 @@ def main
     'core_dir_config *cdconf, DirConfig *pdconf, DirConfigContext context)') \
   do
     add_code %Q{
-      Json::Value *appOptionsContainer = NULL;
-      Json::Value *locOptionsContainer = NULL;
+      json::value *appOptionsContainer = NULL;
+      json::value *locOptionsContainer = NULL;
     }
 
     separator
@@ -96,10 +96,10 @@ def main
         if (pdconf->#{source_location_struct_field}ExplicitlySet) {
           findOrCreateAppAndLocOptionsContainers(serverRec, csconf, cdconf,
             pdconf, context, &appOptionsContainer, &locOptionsContainer);
-          Json::Value &optionContainer = findOrCreateOptionContainer(*#{appropriate_container},
+          json::value &optionContainer = findOrCreateOptionContainer(*#{appropriate_container},
             #{option[:name].inspect},
             sizeof(#{option[:name].inspect}) - 1);
-          Json::Value &hierarchyMember = addOptionContainerHierarchyMember(optionContainer,
+          json::value &hierarchyMember = addOptionContainerHierarchyMember(optionContainer,
             pdconf->#{source_location_struct_field}SourceFile,
             pdconf->#{source_location_struct_field}SourceLine);
       ]
@@ -149,7 +149,7 @@ def add_tracking_value_serialization_code(option)
   case option[:type]
   when :string
     add_code %Q{
-      hierarchyMember["value"] = Json::Value(
+      hierarchyMember["value"] = json::value(
         pdconf->#{value_struct_field}.data(),
         pdconf->#{value_struct_field}.data() + pdconf->#{value_struct_field}.size());
     }

@@ -37,7 +37,7 @@
 #endif
 #include <boost/config.hpp>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <ConfigKit/Common.h>
 #include <ConfigKit/Schema.h>
@@ -61,8 +61,8 @@ private:
 
 	struct Entry {
 		const Schema::Entry *schemaEntry;
-		Json::Value userValue;
-		mutable Json::Value cachedDefaultValue;
+		json::value userValue;
+		mutable json::value cachedDefaultValue;
 		mutable bool defaultValueCachePopulated;
 
 		Entry()
@@ -71,11 +71,11 @@ private:
 
 		Entry(const Schema::Entry &_schemaEntry)
 			: schemaEntry(&_schemaEntry),
-			  userValue(Json::nullValue),
+			  userValue(nullptr),
 			  defaultValueCachePopulated(false)
 			{ }
 
-		Json::Value getDefaultValue(const Store &store) const {
+		json::value getDefaultValue(const Store &store) const {
 			if (defaultValueCachePopulated) {
 				return cachedDefaultValue;
 			} else if (schemaEntry->defaultValueGetter) {
@@ -87,12 +87,12 @@ private:
 					return schemaEntry->defaultValueGetter(store);
 				}
 			} else {
-				return Json::Value(Json::nullValue);
+				return json::value(nullptr);
 			}
 		}
 
-		Json::Value getEffectiveValue(const Store &store) const {
-			if (userValue.isNull()) {
+		json::value getEffectiveValue(const Store &store) const {
+			if (userValue.is_null()) {
 				return getDefaultValue(store);
 			} else if (schemaEntry->nestedSchema == NULL) {
 				return userValue;
@@ -100,7 +100,7 @@ private:
 				// The user value may contain nulls that should
 				// be populated with the default value from the
 				// corresponding nested schema.
-				Json::Value result;
+				json::value result;
 				schemaEntry->tryTypecastArrayOrObjectValueWithNestedSchema(
 					userValue, result, "effective_value");
 				return result;
@@ -112,10 +112,10 @@ private:
 	StringKeyTable<Entry> entries;
 	bool updatedOnce;
 
-	static Json::Value getEffectiveValue(const Json::Value &userValue,
-		const Json::Value &defaultValue, const Schema::Entry &schemaEntry)
+	static json::value getEffectiveValue(const json::value &userValue,
+		const json::value &defaultValue, const Schema::Entry &schemaEntry)
 	{
-		if (userValue.isNull()) {
+		if (userValue.is_null()) {
 			return defaultValue;
 		} else if (schemaEntry.nestedSchema == NULL) {
 			return userValue;
@@ -123,17 +123,17 @@ private:
 			// The user value may contain nulls that should
 			// be populated with the default value from the
 			// corresponding nested schema.
-			Json::Value result;
+			json::value result;
 			schemaEntry.tryTypecastArrayOrObjectValueWithNestedSchema(
 				userValue, result, "effective_value");
 			return result;
 		}
 	}
 
-	static Json::Value maybeFilterSecret(const Entry &entry, const Json::Value &value) {
+	static json::value maybeFilterSecret(const Entry &entry, const json::value &value) {
 		if (entry.schemaEntry->flags & SECRET) {
-			if (value.isNull()) {
-				return Json::nullValue;
+			if (value.is_null()) {
+				return json::value(nullptr);
 			} else {
 				return "[FILTERED]";
 			}
@@ -158,7 +158,7 @@ private:
 		return !(entry.schemaEntry->flags & READ_ONLY) || !updatedOnce;
 	}
 
-	void applyCustomValidators(const Json::Value &updates, vector<Error> &errors) const {
+	void applyCustomValidators(const json::object &updates, vector<Error> &errors) const {
 		Store tempStore(*schema);
 		StringKeyTable<Entry>::Iterator it(tempStore.entries);
 
@@ -166,8 +166,8 @@ private:
 			const HashedStaticString &key = it.getKey();
 			Entry &entry = it.getValue();
 
-			if (isWritable(entry) && updates.isMember(key)) {
-				entry.userValue = updates[key];
+			if (isWritable(entry) && updates.contains(key)) {
+				entry.userValue = updates.find(key)->value();
 			}
 
 			it.next();
@@ -181,36 +181,35 @@ private:
 		}
 	}
 
-	void applyNormalizers(Json::Value &doc) const {
+	void applyNormalizers(json::object &doc) const {
 		boost::container::vector<Schema::Normalizer>::const_iterator n_it, n_end;
 
 		n_it = schema->getNormalizers().begin();
 		n_end = schema->getNormalizers().end();
 		for (; n_it != n_end; n_it++) {
 			const Schema::Normalizer &normalizer = *n_it;
-			Json::Value effectiveValues(Json::objectValue);
-			Json::Value::iterator it, end = doc.end();
+			json::object effectiveValues;
+			json::object::iterator it, end = doc.end();
 
 			for (it = doc.begin(); it != end; it++) {
-				string name = it.name();
-				effectiveValues[name] = doc[name]["effective_value"];
+				effectiveValues[it->key()] = it->value().get_object()["effective_value"];
 			}
 
-			Json::Value updates = normalizer(effectiveValues);
-			if (OXT_UNLIKELY(!updates.isNull() && !updates.isObject())) {
+			json::value updates = normalizer(effectiveValues);
+			if (OXT_UNLIKELY(!updates.is_null() && !updates.is_object())) {
 				P_BUG("ConfigKit normalizers may only return null or object values");
 			}
-			if (updates.isNull() || updates.empty()) {
+			if (updates.is_null() || updates.get_object().empty()) {
 				continue;
 			}
 
-			end = updates.end();
-			for (it = updates.begin(); it != end; it++) {
-				string name = it.name();
-				if (doc.isMember(name)) {
-					Json::Value &subdoc = doc[name];
-					subdoc["user_value"] = *it;
-					subdoc["effective_value"] = *it;
+			end = updates.get_object().end();
+			for (it = updates.get_object().begin(); it != end; it++) {
+				string name = it->key();
+				if (doc.contains(name)) {
+					json::object &subdoc = doc[name].get_object();
+					subdoc["user_value"] = it->value();
+					subdoc["effective_value"] = it->value();
 				} else {
 					P_BUG("A ConfigKit normalizer returned a key that is not part of the schema: "
 						<< name);
@@ -219,7 +218,7 @@ private:
 		}
 	}
 
-	void applyInspectFilters(Json::Value &doc) const {
+	void applyInspectFilters(json::object &doc) const {
 		StringKeyTable<Entry>::ConstIterator it(entries);
 		while (*it != NULL) {
 			const Entry &entry = it.getValue();
@@ -229,39 +228,39 @@ private:
 			}
 
 			const HashedStaticString &key = it.getKey();
-			Json::Value &subdoc = doc[key];
+			json::object &subdoc = doc[key].get_object();
 
-			Json::Value &userValue = subdoc["user_value"];
+			json::value &userValue = subdoc["user_value"];
 			userValue = entry.schemaEntry->inspectFilter(userValue);
 
-			if (subdoc.isMember("default_value")) {
-				Json::Value &defaultValue = subdoc["default_value"];
+			if (subdoc.contains("default_value")) {
+				json::value &defaultValue = subdoc["default_value"];
 				defaultValue = entry.schemaEntry->inspectFilter(defaultValue);
 			}
 
-			Json::Value &effectiveValue = subdoc["effective_value"];
+			json::value &effectiveValue = subdoc["effective_value"];
 			effectiveValue = entry.schemaEntry->inspectFilter(effectiveValue);
 
 			it.next();
 		}
 	}
 
-	void doFilterSecrets(Json::Value &doc) const {
+	void doFilterSecrets(json::object &doc) const {
 		StringKeyTable<Entry>::ConstIterator it(entries);
 		while (*it != NULL) {
 			const HashedStaticString &key = it.getKey();
 			const Entry &entry = it.getValue();
-			Json::Value &subdoc = doc[key];
+			json::object &subdoc = doc[key].get_object();
 
-			Json::Value &userValue = subdoc["user_value"];
+			json::value &userValue = subdoc["user_value"];
 			userValue = maybeFilterSecret(entry, userValue);
 
-			if (subdoc.isMember("default_value")) {
-				Json::Value &defaultValue = subdoc["default_value"];
+			if (subdoc.contains("default_value")) {
+				json::value &defaultValue = subdoc["default_value"];
 				defaultValue = maybeFilterSecret(entry, defaultValue);
 			}
 
-			Json::Value &effectiveValue = subdoc["effective_value"];
+			json::value &effectiveValue = subdoc["effective_value"];
 			effectiveValue = maybeFilterSecret(entry, effectiveValue);
 
 			it.next();
@@ -292,7 +291,7 @@ public:
 		initialize();
 	}
 
-	Store(const Schema &_schema, const Json::Value &initialValues)
+	Store(const Schema &_schema, const json::value &initialValues)
 		: schema(&_schema),
 		  updatedOnce(false)
 	{
@@ -304,7 +303,7 @@ public:
 		}
 	}
 
-	Store(const Schema &_schema, const Json::Value &initialValues,
+	Store(const Schema &_schema, const json::object &initialValues,
 		const Translator &translator)
 		: schema(&_schema),
 		  updatedOnce(false)
@@ -318,18 +317,18 @@ public:
 		}
 	}
 
-	Store(const Store &other, const Json::Value &updates, vector<Error> &errors)
+	Store(const Store &other, const json::object &updates, vector<Error> &errors)
 		: schema(other.schema),
 		  updatedOnce(false)
 	{
-		Json::Value result(Json::objectValue);
+		json::object result;
 		StringKeyTable<Entry>::ConstIterator it(other.entries);
 
 		while (*it != NULL) {
 			const Entry &entry = it.getValue();
-			if (updates.isMember(it.getKey())) {
-				result[it.getKey()] = updates[it.getKey()];
-			} else if (!entry.userValue.isNull()) {
+			if (updates.contains(it.getKey())) {
+				result[it.getKey()] = updates.at(it.getKey());
+			} else if (!entry.userValue.is_null()) {
 				result[it.getKey()] = entry.userValue;
 			}
 			it.next();
@@ -354,17 +353,17 @@ public:
 	 *
 	 * Note that `key` *must* be NULL-terminated!
 	 */
-	Json::Value get(const HashedStaticString &key) const {
+	json::value get(const HashedStaticString &key) const {
 		const Entry *entry;
 
 		if (entries.lookup(key, &entry)) {
 			return entry->getEffectiveValue(*this);
 		} else {
-			return Json::Value(Json::nullValue);
+			return json::value(nullptr);
 		}
 	}
 
-	Json::Value operator[](const HashedStaticString &key) const {
+	json::value operator[](const HashedStaticString &key) const {
 		return get(key);
 	}
 
@@ -388,15 +387,15 @@ public:
 	 *  - If `shouldApplyInspectFilters` is set to false, values of fields
 	 *    are not passed through inspect filters.
 	 */
-	Json::Value previewUpdate(const Json::Value &updates, vector<Error> &errors,
+	json::object previewUpdate(const json::value &updates, vector<Error> &errors,
 		const PreviewOptions &options = PreviewOptions()) const
 	{
-		if (!updates.isNull() && !updates.isObject()) {
+		if (!updates.is_null() && !updates.is_object()) {
 			errors.push_back(Error("The JSON document must be an object"));
 			return inspect();
 		}
 
-		Json::Value result(Json::objectValue);
+		json::object result;
 		Store storeWithPreviewData(*this);
 		StringKeyTable<Entry>::Iterator p_it(storeWithPreviewData.entries);
 		StringKeyTable<Entry>::ConstIterator it(entries);
@@ -406,11 +405,11 @@ public:
 			const HashedStaticString &key = p_it.getKey();
 			Entry &entry = p_it.getValue();
 
-			if (isWritable(entry) && updates.isMember(key)) {
+			if (isWritable(entry) && updates.is_object() && updates.get_object().contains(key)) {
 				bool ok = entry.schemaEntry->tryTypecastValue(
-					updates[key], entry.userValue);
+					updates.at(key), entry.userValue);
 				if (!ok) {
-					entry.userValue = updates[key];
+					entry.userValue = updates.at(key);
 				}
 			}
 
@@ -420,15 +419,15 @@ public:
 		while (*it != NULL) {
 			const HashedStaticString &key = it.getKey();
 			const Entry &entry = it.getValue();
-			Json::Value subdoc(Json::objectValue);
+			json::object subdoc;
 
 			entry.schemaEntry->inspect(subdoc);
 
-			if (isWritable(entry) && updates.isMember(key)) {
-				bool ok = entry.schemaEntry->tryTypecastValue(updates[key],
+			if (isWritable(entry) && updates.is_object() && updates.get_object().contains(key)) {
+				bool ok = entry.schemaEntry->tryTypecastValue(updates.at(key),
 					subdoc["user_value"]);
 				if (!ok) {
-					subdoc["user_value"] = updates[key];
+					subdoc["user_value"] = updates.at(key);
 				}
 			} else {
 				subdoc["user_value"] = entry.userValue;
@@ -438,7 +437,7 @@ public:
 				subdoc["default_value"] = entry.getDefaultValue(storeWithPreviewData);
 			}
 
-			const Json::Value &effectiveValue =
+			const json::value &effectiveValue =
 				subdoc["effective_value"] =
 					getEffectiveValue(subdoc["user_value"],
 						subdoc["default_value"],
@@ -450,7 +449,7 @@ public:
 		}
 
 		if (!schema->getValidators().empty()) {
-			applyCustomValidators(updates, tmpErrors);
+			applyCustomValidators(updates.get_object(), tmpErrors);
 		}
 
 		if (tmpErrors.empty()) {
@@ -479,19 +478,17 @@ public:
 	 * Any keys in `updates` that are not registered will not participate in the update.
 	 * Any keys not in `updates` do not affect existing values stored in the store.
 	 */
-	bool update(const Json::Value &updates, vector<Error> &errors) {
+	bool update(const json::value &updates, vector<Error> &errors) {
 		PreviewOptions options;
 		options.filterSecrets = false;
 		options.shouldApplyInspectFilters = false;
-		Json::Value preview = previewUpdate(updates, errors, options);
+		json::value preview = previewUpdate(updates, errors, options);
 		if (errors.empty()) {
 			StringKeyTable<Entry>::Iterator it(entries);
 			while (*it != NULL) {
 				Entry &entry = it.getValue();
 				if (isWritable(entry)) {
-					const Json::Value &subdoc =
-						const_cast<const Json::Value &>(preview)[it.getKey()];
-					entry.userValue = subdoc["user_value"];
+					entry.userValue = preview.at(it.getKey()).at("user_value");
 				}
 				it.next();
 			}
@@ -537,13 +534,13 @@ public:
 	 * other useful information. See the README's "Inspecting all data"
 	 * section to learn about the format.
 	 */
-	Json::Value inspect() const {
-		Json::Value result(Json::objectValue);
+	json::object inspect() const {
+		json::object result;
 		StringKeyTable<Entry>::ConstIterator it(entries);
 
 		while (*it != NULL) {
 			const Entry &entry = it.getValue();
-			Json::Value subdoc(Json::objectValue);
+			json::object subdoc;
 
 			entry.schemaEntry->inspect(subdoc);
 			subdoc["user_value"] = entry.userValue;
@@ -569,8 +566,8 @@ public:
 	 * about the format.
 	 * Note that values with the SECRET flag are not filtered.
 	 */
-	Json::Value inspectEffectiveValues() const {
-		Json::Value result(Json::objectValue);
+	json::object inspectEffectiveValues() const {
+		json::object result;
 		StringKeyTable<Entry>::ConstIterator it(entries);
 
 		while (*it != NULL) {
@@ -587,8 +584,8 @@ public:
 	 * values only. This is like `inspect()` but much less verbose.
 	 * Note that values with the SECRET flag are not filtered.
 	 */
-	Json::Value inspectUserValues() const {
-		Json::Value result(Json::objectValue);
+	json::value inspectUserValues() const {
+		json::object result;
 		StringKeyTable<Entry>::ConstIterator it(entries);
 
 		while (*it != NULL) {
@@ -603,39 +600,65 @@ public:
 
 
 inline bool
-Schema::Entry::tryTypecastArrayOrObjectValueWithNestedSchema(const Json::Value &val,
-	Json::Value &result, const char *userOrEffectiveValue) const
+Schema::Entry::tryTypecastArrayOrObjectValueWithNestedSchema(const json::value &val,
+	json::value &result, const char *userOrEffectiveValue) const
 {
 	assert(type == ARRAY_TYPE || type == OBJECT_TYPE);
 	assert(nestedSchema != NULL);
-	assert(!val.isNull());
-	assert(val.isConvertibleTo(Json::arrayValue)
-		|| val.isConvertibleTo(Json::objectValue));
+	assert(val.is_structured());
 
 	bool ok = true;
 	result = val;
 
-	Json::Value::iterator it, end = result.end();
-	for (it = result.begin(); it != end; it++) {
-		Json::Value &userSubdoc = *it;
-		if (!userSubdoc.isConvertibleTo(Json::objectValue)) {
-			ok = false;
-			continue;
-		}
+	switch (result.kind()) {
+	case json::kind::array: {
+		json::array::iterator it, end = result.get_array().end();
+		for (it = result.get_array().begin(); it != end; it++) {
+			json::value &userSubdoc = *it;
+			if (!userSubdoc.is_object()) {
+				ok = false;
+				continue;
+			}
 
-		vector<Error> errors;
-		Json::Value preview = Store(*nestedSchema).previewUpdate(
-			userSubdoc, errors);
-		Json::Value::const_iterator p_it, p_end = preview.end();
-		for (p_it = preview.begin(); p_it != p_end; p_it++) {
-			const Json::Value &previewSubdoc = *p_it;
-			userSubdoc[p_it.name()] = previewSubdoc[userOrEffectiveValue];
+			vector<Error> errors;
+			json::object preview = Store(*nestedSchema).previewUpdate(
+																			 userSubdoc, errors);
+			json::object::const_iterator p_it, p_end = preview.end();
+			for (p_it = preview.begin(); p_it != p_end; p_it++) {
+				const json::object &previewSubdoc = p_it->value().get_object();
+				userSubdoc.get_object()[p_it->key()] = previewSubdoc.at(userOrEffectiveValue);
+			}
 		}
+		break;
+	}
+	case json::kind::object: {
+		json::object::iterator it, end = result.get_object().end();
+		for (it = result.get_object().begin(); it != end; it++) {
+			json::value &userSubdoc = it->value();
+			if (!userSubdoc.is_object()) {
+				ok = false;
+				continue;
+			}
+
+			vector<Error> errors;
+			json::object preview = Store(*nestedSchema).previewUpdate(
+																			 userSubdoc, errors);
+			json::object::const_iterator p_it, p_end = preview.end();
+			for (p_it = preview.begin(); p_it != p_end; p_it++) {
+				const json::value &previewSubdoc = p_it->value().get_object();
+				userSubdoc.get_object()[p_it->key()] = previewSubdoc.at(userOrEffectiveValue);
+			}
+		}
+		break;
+	}
+	default:
+		//should never happen, shut up clang
+		return false;
 	}
 	return ok;
 }
 
-inline Json::Value
+inline json::value
 Schema::getValueFromSubSchema(
 	const Store &store,
 	const Schema *subschema, const Translator *translator,
@@ -647,10 +670,10 @@ Schema::getValueFromSubSchema(
 		if (tempEntry->schemaEntry->defaultValueGetter) {
 			return tempEntry->schemaEntry->defaultValueGetter(tempStore);
 		} else {
-			return Json::nullValue;
+			return json::value(nullptr);
 		}
 	} else {
-		return Json::nullValue;
+		return json::value(nullptr);
 	}
 }
 
@@ -668,12 +691,12 @@ Schema::validateSubSchema(const Store &store, vector<Error> &errors,
 	}
 }
 
-inline Json::Value
-Schema::normalizeSubSchema(const Json::Value &effectiveValues,
+inline json::object
+Schema::normalizeSubSchema(const json::object &effectiveValues,
 	const Schema *mainSchema, const Schema *subschema,
 	const Translator *translator, const Normalizer &origNormalizer)
 {
-	Json::Value translatedEffectiveValues(Json::objectValue);
+	json::object translatedEffectiveValues;
 	StringKeyTable<Entry>::ConstIterator it(subschema->entries);
 
 	while (*it != NULL) {
@@ -683,7 +706,7 @@ Schema::normalizeSubSchema(const Json::Value &effectiveValues,
 		const Entry *mainSchemaEntry;
 
 		if (mainSchema->entries.lookup(mainSchemaKey, &mainSchemaEntry)) {
-			translatedEffectiveValues[subSchemaKey] = effectiveValues[mainSchemaKey];
+			translatedEffectiveValues[subSchemaKey] = effectiveValues.at(mainSchemaKey);
 		}
 
 		it.next();
@@ -692,7 +715,7 @@ Schema::normalizeSubSchema(const Json::Value &effectiveValues,
 	return translator->reverseTranslate(origNormalizer(translatedEffectiveValues));
 }
 
-inline Json::Value
+inline json::value
 Schema::getStaticDefaultValue(const Schema::Entry &entry) {
 	Store::Entry storeEntry(entry);
 	return Store::maybeFilterSecret(storeEntry, storeEntry.getDefaultValue(Store()));
@@ -700,14 +723,14 @@ Schema::getStaticDefaultValue(const Schema::Entry &entry) {
 
 inline bool
 Schema::validateNestedSchemaArrayValue(const HashedStaticString &key,
-	const Schema::Entry &entry, const Json::Value &value, vector<Error> &errors)
+	const Schema::Entry &entry, const json::array &value, vector<Error> &errors)
 {
 	bool warnedAboutNonObjectValue = false;
 	bool result = true;
 
-	Json::Value::const_iterator it, end = value.end();
+	json::array::const_iterator it, end = value.end();
 	for (it = value.begin(); it != end; it++) {
-		if (!it->isConvertibleTo(Json::objectValue)) {
+		if (!it->is_object()) {
 			if (!warnedAboutNonObjectValue) {
 				warnedAboutNonObjectValue = true;
 				result = false;
@@ -726,7 +749,7 @@ Schema::validateNestedSchemaArrayValue(const HashedStaticString &key,
 		vector<Error>::const_iterator e_it, e_end = nestedSchemaErrors.end();
 		for (e_it = nestedSchemaErrors.begin(); e_it != e_end; e_it++) {
 			errors.push_back(Error("'{{" + key + "}}' element "
-				+ Passenger::toString(it.index() + 1) + " is invalid: "
+				+ Passenger::toString(it - value.begin() + 1) + " is invalid: "
 				+ e_it->getMessage()));
 		}
 		result = false;
@@ -737,14 +760,14 @@ Schema::validateNestedSchemaArrayValue(const HashedStaticString &key,
 
 inline bool
 Schema::validateNestedSchemaObjectValue(const HashedStaticString &key,
-	const Schema::Entry &entry, const Json::Value &value, vector<Error> &errors)
+	const Schema::Entry &entry, const json::object &value, vector<Error> &errors)
 {
 	bool warnedAboutNonObjectValue = false;
 	bool result = true;
 
-	Json::Value::const_iterator it, end = value.end();
+	json::object::const_iterator it, end = value.end();
 	for (it = value.begin(); it != end; it++) {
-		if (!it->isConvertibleTo(Json::objectValue)) {
+		if (!it->value().is_object()) {
 			if (!warnedAboutNonObjectValue) {
 				warnedAboutNonObjectValue = true;
 				result = false;
@@ -756,14 +779,14 @@ Schema::validateNestedSchemaObjectValue(const HashedStaticString &key,
 
 		Store store(*entry.nestedSchema);
 		vector<Error> nestedSchemaErrors;
-		if (store.update(*it, nestedSchemaErrors)) {
+		if (store.update(it->value(), nestedSchemaErrors)) {
 			continue;
 		}
 
 		vector<Error>::const_iterator e_it, e_end = nestedSchemaErrors.end();
 		for (e_it = nestedSchemaErrors.begin(); e_it != e_end; e_it++) {
 			errors.push_back(Error("'{{" + key + "}}' key '"
-				+ it.name() + "' is invalid: "
+				+ it->key().data() + "' is invalid: "
 				+ e_it->getMessage()));
 		}
 		result = false;

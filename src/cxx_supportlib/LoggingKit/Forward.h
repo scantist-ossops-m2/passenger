@@ -27,7 +27,7 @@
 #define _PASSENGER_LOGGING_KIT_FORWARD_H_
 
 #include <StaticString.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 namespace Passenger {
 	#ifndef _PASSENGER_FAST_STRING_STREAM_FORWARD_DECLARED_

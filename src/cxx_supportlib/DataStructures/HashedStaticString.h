@@ -55,12 +55,25 @@ public:
 
 	HashedStaticString& operator=(const HashedStaticString &other) = default;
 
+
 	HashedStaticString(const HashedStaticString &b)
 		: StaticString(b),
 		  m_hash(b.m_hash)
 		{ }
 
 	HashedStaticString(const string &s)
+		: StaticString(s)
+	{
+		rehash();
+	}
+
+	HashedStaticString(const json::string &s)
+		: StaticString(s)
+	{
+		rehash();
+	}
+
+	HashedStaticString(const json::string_view &s)
 		: StaticString(s)
 	{
 		rehash();

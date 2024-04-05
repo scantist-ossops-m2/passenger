@@ -32,7 +32,7 @@
 #include <cassert>
 
 #include <oxt/backtrace.hpp>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <Exceptions.h>
 #include <LoggingKit/LoggingKit.h>
@@ -78,57 +78,57 @@ public:
 			  nestedSchema(_nestedSchema)
 			{ }
 
-		bool tryTypecastValue(const Json::Value &val, Json::Value &result) const {
-			if (val.isNull()) {
-				result = Json::nullValue;
+		bool tryTypecastValue(const json::value &val, json::value &result) const {
+			if (val.is_null()) {
+				result.emplace_null();
 				return true;
 			}
 
 			switch (type) {
 			case STRING_TYPE:
-				if (val.isConvertibleTo(Json::stringValue)) {
-					result = val.asString();
+				if (val.is_string()) {
+					result = val.get_string();
 					return true;
 				} else {
 					return false;
 				}
 			case INT_TYPE:
-				if (val.isConvertibleTo(Json::intValue)) {
-					result = val.asInt();
+				if (val.is_int64()) {
+					result = val.get_int64();
 					return true;
 				} else {
 					return false;
 				}
 			case UINT_TYPE:
-				if (val.isConvertibleTo(Json::uintValue)) {
-					result = val.asUInt();
+				if (val.is_uint64()) {
+					result = val.get_uint64();
 					return true;
 				} else {
 					return false;
 				}
 			case FLOAT_TYPE:
-				if (val.isConvertibleTo(Json::realValue)) {
-					result = val.asDouble();
+				if (val.is_double()) {
+					result = val.get_double();
 					return true;
 				} else {
 					return false;
 				}
 			case BOOL_TYPE:
-				if (val.isConvertibleTo(Json::booleanValue)) {
-					result = val.asBool();
+				if (val.is_bool()) {
+					result = val.get_bool();
 					return true;
 				} else {
 					return false;
 				}
 			case ARRAY_TYPE:
 			case OBJECT_TYPE: {
-				Json::ValueType targetType;
+				json::kind targetType;
 				if (type == ARRAY_TYPE) {
-					targetType = Json::arrayValue;
+					targetType = json::kind::array;
 				} else {
-					targetType = Json::objectValue;
+					targetType = json::kind::object;
 				}
-				if (val.isConvertibleTo(targetType)) {
+				if (val.kind() == targetType) {
 					if (nestedSchema != NULL) {
 						return tryTypecastArrayOrObjectValueWithNestedSchema(val,
 							result, "user_value");
@@ -146,36 +146,36 @@ public:
 			}
 		}
 
-		bool tryTypecastArrayOrObjectValueWithNestedSchema(const Json::Value &val,
-			Json::Value &result, const char *userOrEffectiveValue) const;
+		bool tryTypecastArrayOrObjectValueWithNestedSchema(const json::value &val,
+			json::value &result, const char *userOrEffectiveValue) const;
 
-		Json::Value inspect() const {
-			Json::Value result(Json::objectValue);
+		json::object inspect() const {
+			json::object result;
 			inspect(result);
 			return result;
 		}
 
-		void inspect(Json::Value &doc) const {
-			doc["type"] = getTypeString(type).data();
+		void inspect(json::object &doc) const {
+			doc.insert_or_assign("type", getTypeString(type).data());
 			if (flags & REQUIRED) {
-				doc["required"] = true;
+				doc.insert_or_assign("required", true);
 			}
 			if (flags & READ_ONLY) {
-				doc["read_only"] = true;
+				doc.insert_or_assign("read_only", true);
 			}
 			if (flags & SECRET) {
-				doc["secret"] = true;
+				doc.insert_or_assign("secret", true);
 			}
 			if (defaultValueGetter) {
 				if (flags & _DYNAMIC_DEFAULT_VALUE) {
-					doc["has_default_value"] = "dynamic";
+					doc.insert_or_assign("has_default_value", "dynamic");
 				} else {
-					doc["has_default_value"] = "static";
-					doc["default_value"] = Schema::getStaticDefaultValue(*this);
+					doc.insert_or_assign("has_default_value", "static");
+					doc.insert_or_assign("default_value", Schema::getStaticDefaultValue(*this));
 				}
 			}
 			if (nestedSchema != NULL) {
-				doc["nested_schema"] = nestedSchema->inspect();
+				doc.insert_or_assign("nested_schema", nestedSchema->inspect());
 			}
 		}
 	};
@@ -197,7 +197,7 @@ public:
 
 	typedef StringKeyTable<Entry>::ConstIterator ConstIterator;
 	typedef boost::function<void (const Store &store, vector<Error> &errors)> Validator;
-	typedef boost::function<Json::Value (const Json::Value &effectiveValues)> Normalizer;
+	typedef boost::function<json::object (const json::object &effectiveValues)> Normalizer;
 
 private:
 	StringKeyTable<Entry> entries;
@@ -205,11 +205,11 @@ private:
 	boost::container::vector<Normalizer> normalizers;
 	bool finalized;
 
-	static Json::Value returnJsonValue(const Store &store, Json::Value v) {
+	static json::value returnJsonValue(const Store &store, json::value v) {
 		return v;
 	}
 
-	static Json::Value getValueFromSubSchema(
+	static json::value getValueFromSubSchema(
 		const Store &storeWithMainSchema,
 		const Schema *subschema, const Translator *translator,
 		const HashedStaticString &key);
@@ -218,16 +218,16 @@ private:
 		const Schema *subschema, const Translator *translator,
 		const Validator &origValidator);
 
-	static Json::Value normalizeSubSchema(const Json::Value &effectiveValues,
+	static json::object normalizeSubSchema(const json::object &effectiveValues,
 		const Schema *mainSchema, const Schema *subschema,
 		const Translator *translator, const Normalizer &origNormalizer);
 
-	static Json::Value getStaticDefaultValue(const Schema::Entry &entry);
+	static json::value getStaticDefaultValue(const Schema::Entry &entry);
 
 	static bool validateNestedSchemaArrayValue(const HashedStaticString &key,
-		const Entry &entry, const Json::Value &value, vector<Error> &errors);
+		const Entry &entry, const json::array &value, vector<Error> &errors);
 	static bool validateNestedSchemaObjectValue(const HashedStaticString &key,
-		const Entry &entry, const Json::Value &value, vector<Error> &errors);
+		const Entry &entry, const json::object &value, vector<Error> &errors);
 
 public:
 	Schema()
@@ -240,10 +240,10 @@ public:
 	 * Register a new schema entry, possibly with a static default value.
 	 */
 	EntryBuilder add(const HashedStaticString &key, Type type, unsigned int flags,
-		const Json::Value &defaultValue = Json::Value(Json::nullValue))
+		const json::value &defaultValue = json::value(nullptr))
 	{
 		assert(!finalized);
-		if (defaultValue.isNull()) {
+		if (defaultValue.is_null()) {
 			Entry entry(type, (Flags) flags, ValueGetter(), ValueFilter());
 			return EntryBuilder(entries.insert(key, entry)->value);
 		} else {
@@ -300,7 +300,7 @@ public:
 
 			if (entry.defaultValueGetter) {
 				if (entry.flags & _DYNAMIC_DEFAULT_VALUE) {
-					valueGetter = boost::bind<Json::Value>(
+					valueGetter = boost::bind<json::value>(
 						getValueFromSubSchema,
 						boost::placeholders::_1, &subschema, &translator,
 						key);
@@ -336,7 +336,7 @@ public:
 	}
 
 	void override(const HashedStaticString &key, Type type, unsigned int flags,
-		const Json::Value &defaultValue = Json::Value(Json::nullValue))
+		const json::value &defaultValue = json::value(nullptr))
 	{
 		erase(key);
 		add(key, type, flags, defaultValue);
@@ -380,7 +380,7 @@ public:
 	 * Returns whether validation passed. If not, then an Error is appended
 	 * to `errors`.
 	 */
-	bool validateValue(const HashedStaticString &key, const Json::Value &value,
+	bool validateValue(const HashedStaticString &key, const json::value &value,
 		vector<Error> &errors) const
 	{
 		const Entry *entry;
@@ -390,7 +390,7 @@ public:
 			throw ArgumentException("Unknown key " + key);
 		}
 
-		if (value.isNull()) {
+		if (value.is_null()) {
 			if (entry->flags & REQUIRED) {
 				errors.push_back(Error("'{{" + key + "}}' is required"));
 				return false;
@@ -401,22 +401,22 @@ public:
 
 		switch (entry->type) {
 		case STRING_TYPE:
-			if (value.isConvertibleTo(Json::stringValue)) {
+			if (value.is_string()) {
 				return true;
 			} else {
 				errors.push_back(Error("'{{" + key + "}}' must be a string"));
 				return false;
 			}
 		case INT_TYPE:
-			if (value.isConvertibleTo(Json::intValue)) {
+			if (value.is_int64()) {
 				return true;
 			} else {
 				errors.push_back(Error("'{{" + key + "}}' must be an integer"));
 				return false;
 			}
 		case UINT_TYPE:
-			if (value.isConvertibleTo(Json::intValue)) {
-				if (value.isConvertibleTo(Json::uintValue)) {
+			if (value.is_number() && !value.is_double()) {
+				if (value.is_uint64()) {
 					return true;
 				} else {
 					errors.push_back(Error("'{{" + key + "}}' must be greater than 0"));
@@ -427,36 +427,36 @@ public:
 				return false;
 			}
 		case FLOAT_TYPE:
-			if (value.isConvertibleTo(Json::realValue)) {
+			if (value.is_double()) {
 				return true;
 			} else {
 				errors.push_back(Error("'{{" + key + "}}' must be a number"));
 				return false;
 			}
 		case BOOL_TYPE:
-			if (value.isConvertibleTo(Json::booleanValue)) {
+			if (value.is_bool()) {
 				return true;
 			} else {
 				errors.push_back(Error("'{{" + key + "}}' must be a boolean"));
 				return false;
 			}
 		case ARRAY_TYPE:
-			if (value.isConvertibleTo(Json::arrayValue)) {
+			if (value.is_array()) {
 				if (entry->nestedSchema == NULL) {
 					return true;
 				} else {
 					return validateNestedSchemaArrayValue(key, *entry,
-						value, errors);
+					    value.get_array(), errors);
 				}
 			} else {
 				errors.push_back(Error("'{{" + key + "}}' must be an array"));
 				return false;
 			}
 		case STRING_ARRAY_TYPE:
-			if (value.isConvertibleTo(Json::arrayValue)) {
-				Json::Value::const_iterator it, end = value.end();
-				for (it = value.begin(); it != end; it++) {
-					if (it->type() != Json::stringValue) {
+			if (value.is_array()) {
+				json::array::const_iterator it, end = value.get_array().end();
+				for (it = value.get_array().begin(); it != end; it++) {
+					if (!it->is_string()) {
 						errors.push_back(Error("'{{" + key + "}}' may only contain strings"));
 						return false;
 					}
@@ -467,12 +467,12 @@ public:
 				return false;
 			}
 		case OBJECT_TYPE:
-			if (value.isObject()) {
+			if (value.is_object()) {
 				if (entry->nestedSchema == NULL) {
 					return true;
 				} else {
 					return validateNestedSchemaObjectValue(key, *entry,
-						value, errors);
+						value.get_object(), errors);
 				}
 			} else {
 				errors.push_back(Error("'{{" + key + "}}' must be a JSON object"));
@@ -501,13 +501,13 @@ public:
 		return ConstIterator(entries);
 	}
 
-	Json::Value inspect() const {
+	json::object inspect() const {
 		assert(finalized);
-		Json::Value result(Json::objectValue);
+		json::object result;
 		StringKeyTable<Entry>::ConstIterator it(entries);
 
 		while (*it != NULL) {
-			result[it.getKey()] = it.getValue().inspect();
+			result.insert_or_assign(it.getKey(), it.getValue().inspect());
 			it.next();
 		}
 

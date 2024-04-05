@@ -32,7 +32,7 @@
 #include <oxt/macros.hpp>
 #include <oxt/backtrace.hpp>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <LoggingKit/LoggingKit.h>
 #include <StaticString.h>
@@ -164,10 +164,10 @@ public:
 		}
 	}
 
-	Json::Value inspectAsJson(const JourneyStepInfo *nextStepInfo, MonotonicTimeUsec monoNow,
+	json::value inspectAsJson(const JourneyStepInfo *nextStepInfo, MonotonicTimeUsec monoNow,
 		unsigned long long now) const
 	{
-		Json::Value doc;
+		json::object doc;
 
 		doc["state"] = journeyStepStateToString(state).toString();
 		if (beginTime != 0) {
@@ -417,8 +417,8 @@ public:
 		}
 	}
 
-	Json::Value inspectAsJson() const {
-		Json::Value doc, steps;
+	json::value inspectAsJson() const {
+		json::object doc, steps;
 		MonotonicTimeUsec monoNow = SystemTime::getMonotonicUsec();
 		unsigned long long now = SystemTime::getUsec();
 

@@ -33,7 +33,7 @@
 #include <set>
 #include <vector>
 #include <string>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <modp_b64.h>
 #include <Exceptions.h>
 #include <StrIntTools/StrIntUtils.h>
@@ -423,19 +423,19 @@ public:
 		return result;
 	}
 
-	Json::Value getJsonObject(const string &name, bool required = true,
-		const Json::Value &defaultValue = Json::Value()) const
+	json::value getJsonObject(const string &name, bool required = true,
+		const json::value &defaultValue = json::value()) const
 	{
-		Json::Value result = defaultValue;
+		json::value result = defaultValue;
 		const string *str;
 		if (lookup(name, required, &str)) {
-			result.clear();
-			Json::Reader reader;
-			if (!reader.parse(*str, result)) {
+			error_code ec;
+			result = json::parse(*str, ec);
+			if (!ec) {
 				throw RuntimeException("Cannot parse '" + name + "' key as JSON data: "
-					+ reader.getFormattedErrorMessages());
+									   + ec.message());
 			}
-			if (!result.isObject()) {
+			if (!result.is_object()) {
 				throw RuntimeException("'" + name + "' is valid JSON but is not an object");
 			}
 		}

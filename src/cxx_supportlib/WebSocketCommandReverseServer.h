@@ -31,6 +31,8 @@
 
 #include <boost/make_shared.hpp>
 #include <boost/function.hpp>
+#include <boost/scoped_ptr.hpp>
+#include <boost/json.hpp>
 #include <oxt/backtrace.hpp>
 #include <oxt/macros.hpp>
 
@@ -39,7 +41,6 @@
 #include <deque>
 #include <cstring>
 
-#include <jsoncpp/json.h>
 #include <modp_b64.h>
 
 #include <LoggingKit/Logging.h>
@@ -49,6 +50,7 @@
 #include <FileTools/PathManip.h>
 #include <FileTools/FileManip.h>
 #include <Utils.h>
+#include <JsonTools/JsonUtils.h>
 #include <StrIntTools/StrIntUtils.h>
 
 namespace Passenger {
@@ -94,7 +96,7 @@ using namespace std;
  *
  *
  *     // Set configuration
- *     Json::Value config;
+ *     json::value config;
  *     config["url"] = "ws://127.0.0.1:8001/";
  *
  *     // Create and initialize the server
@@ -194,37 +196,37 @@ public:
 			typedef ConfigKit::Error Error;
 
 			// url is required, but Core::Schema overrides it to be optional.
-			if (config["url"].isNull() || config["auth_type"].asString() == "none") {
+			if (config["url"].is_null() || config["auth_type"].as_string() == "none") {
 				return;
 			}
 
-			if (config["auth_type"].asString() != "basic") {
+			if (config["auth_type"].as_string() != "basic") {
 				errors.push_back(Error("Unsupported '{{auth_type}}' value"
 					" (only 'none' and 'basic' are supported)"));
 			}
 
-			if (config["auth_type"].asString() == "basic") {
-				if (config["username"].isNull()) {
+			if (config["auth_type"].as_string() == "basic") {
+				if (config["username"].is_null()) {
 					errors.push_back(Error(
 						"When '{{auth_type}}' is set to 'basic', '{{username}}' must also be set"));
 				}
 
-				if (config["password"].isNull() && config["password_file"].isNull()) {
+				if (config["password"].is_null() && config["password_file"].is_null()) {
 					errors.push_back(Error(
 						"When '{{auth_type}}' is set to 'basic',"
 						" then either '{{password}}' or '{{password_file}}' must also be set"));
-				} else if (!config["password"].isNull() && !config["password_file"].isNull()) {
+				} else if (!config["password"].is_null() && !config["password_file"].is_null()) {
 					errors.push_back(Error(
 						"Only one of '{{password}}' or '{{password_file}}' may be set, but not both"));
 				}
 			}
 		}
 
-		static Json::Value normalizeAuthentication(const Json::Value &effectiveValues) {
-			Json::Value updates;
-			if (!effectiveValues["password_file"].isNull()) {
+		static json::object normalizeAuthentication(const json::object &effectiveValues) {
+			json::object updates;
+			if (!effectiveValues.at("password_file").is_null()) {
 				updates["password_file"] = absolutizePath(
-					effectiveValues["password_file"].asString());
+				effectiveValues.at("password_file").as_string());
 			}
 			return updates;
 		}
@@ -245,8 +247,8 @@ public:
 		bool dataDebug;
 
 		ConfigRealization(const ConfigKit::Store &config)
-			: logPrefix(config["log_prefix"].asString()),
-			  dataDebug(config["data_debug"].asBool())
+			: logPrefix(jsonValueToString(config["log_prefix"])),
+			  dataDebug(config["data_debug"].as_bool())
 			{ }
 
 		void swap(ConfigRealization &other) BOOST_NOEXCEPT_OR_NOTHROW {
@@ -266,7 +268,7 @@ public:
 	typedef websocketpp::connection_hdl ConnectionWeakPtr;
 
 	typedef boost::function<void ()> Callback;
-	typedef boost::function<void (const Json::Value &doc)> InspectCallback;
+	typedef boost::function<void (const json::value &doc)> InspectCallback;
 	typedef boost::function<bool (WebSocketCommandReverseServer *server,
 		const ConnectionPtr &conn, const MessagePtr &msg)> MessageHandler;
 
@@ -343,12 +345,12 @@ private:
 	}
 
 	void activateConfigUpdates(const ConfigKit::Store *oldConfig) {
-		if (config["websocketpp_debug_access"].asBool()) {
+		if (config["websocketpp_debug_access"].as_bool()) {
 			endpoint.set_access_channels(websocketpp::log::alevel::all);
 		} else {
 			endpoint.clear_access_channels(websocketpp::log::alevel::all);
 		}
-		if (config["websocketpp_debug_error"].asBool()) {
+		if (config["websocketpp_debug_error"].as_bool()) {
 			endpoint.set_error_channels(websocketpp::log::elevel::all);
 		} else {
 			endpoint.clear_error_channels(websocketpp::log::elevel::all);
@@ -358,20 +360,20 @@ private:
 			return;
 		}
 		bool shouldReconnect =
-			oldConfig->get("url").asString() != config["url"].asString() ||
-			oldConfig->get("proxy_url").asString() != config["proxy_url"].asString() ||
-			oldConfig->get("data_debug").asBool() != config["data_debug"].asBool() ||
-			oldConfig->get("websocketpp_debug_access").asBool() != config["websocketpp_debug_access"].asBool() ||
-			oldConfig->get("websocketpp_debug_error").asBool() != config["websocketpp_debug_error"].asBool();
+			oldConfig->get("url").as_string() != config["url"].as_string() ||
+			oldConfig->get("proxy_url").as_string() != config["proxy_url"].as_string() ||
+			oldConfig->get("data_debug").as_bool() != config["data_debug"].as_bool() ||
+			oldConfig->get("websocketpp_debug_access").as_bool() != config["websocketpp_debug_access"].as_bool() ||
+			oldConfig->get("websocketpp_debug_error").as_bool() != config["websocketpp_debug_error"].as_bool();
 		if (shouldReconnect) {
 			internalReconnect();
 		}
 	}
 
 	void internalInspectState(const InspectCallback callback) {
-		Json::Value doc(Json::objectValue);
+		json::object doc;
 		doc["state"] = getStateString();
-		doc["buffer"]["message_count"] = (Json::UInt) buffer.size();
+		doc["buffer"].at("message_count") = (uint64_t) buffer.size();
 		if (reconnectAfterReply) {
 			doc["reconnect_planned"] = true;
 		}
@@ -418,11 +420,11 @@ private:
 			state = CONNECTING;
 		}
 
-		P_NOTICE(getLogPrefix() << "Connecting to " << config["url"].asString());
-		conn = endpoint.get_connection(config["url"].asString(), ec);
+		P_NOTICE(getLogPrefix() << "Connecting to " << config["url"].as_string());
+		conn = endpoint.get_connection(jsonValueToString(config["url"]), ec);
 		if (ec) {
 			P_ERROR(getLogPrefix() << "Error setting up a socket to "
-				<< config["url"].asString() << ": " << ec.message());
+				<< config["url"].as_string() << ": " << ec.message());
 			{
 				boost::lock_guard<boost::mutex> l(stateSyncher);
 				state = NOT_CONNECTED;
@@ -441,7 +443,7 @@ private:
 			return;
 		}
 
-		if (config["auth_type"].asString() == "basic") {
+		if (config["auth_type"].as_string() == "basic") {
 			try {
 				addBasicAuthHeader(conn);
 			} catch (const std::exception &e) {
@@ -493,12 +495,12 @@ private:
 	}
 
 	void addBasicAuthHeader(ConnectionPtr &conn) {
-		string username = config["username"].asString();
+		string username = jsonValueToString(config["username"]);
 		string password;
-		if (config["password_file"].isNull()) {
-			password = config["password"].asString();
+		if (config["password_file"].is_null()) {
+			password = jsonValueToString(config["password"]);
 		} else {
-			password = strip(unsafeReadFile(config["password_file"].asString()));
+			password = strip(unsafeReadFile(jsonValueToString(config["password_file"])));
 		}
 		string data = modp::b64_encode(username + ":" + password);
 		conn->append_header("Authorization", "Basic " + data);
@@ -507,41 +509,41 @@ private:
 	bool applyConnectionConfig(ConnectionPtr &conn) {
 		websocketpp::lib::error_code ec;
 
-		if (!config["proxy_url"].isNull()) {
-			conn->set_proxy(config["proxy_url"].asString(), ec);
+		if (!config["proxy_url"].is_null()) {
+			conn->set_proxy(jsonValueToString(config["proxy_url"]), ec);
 			if (ec) {
 				P_ERROR(getLogPrefix()
 					<< "Error setting proxy URL to "
-					<< config["proxy_url"].asString() << ": "
+					<< config["proxy_url"].as_string() << ": "
 					<< ec.message());
 				return false;
 			}
 
-			if (!config["proxy_username"].isNull() || !config["proxy_password"].isNull()) {
-				conn->set_proxy_basic_auth(config["proxy_username"].asString(),
-					config["proxy_password"].asString(), ec);
+			if (!config["proxy_username"].is_null() || !config["proxy_password"].is_null()) {
+				conn->set_proxy_basic_auth(jsonValueToString(config["proxy_username"]),
+					jsonValueToString(config["proxy_password"]), ec);
 				if (ec) {
 					P_ERROR(getLogPrefix()
 						<< "Error setting proxy authentication credentials to "
-						<< config["proxy_username"].asString() << ":<password omitted>:"
+						<< config["proxy_username"].as_string() << ":<password omitted>:"
 						<< ec.message());
 					return false;
 				}
 			}
 
-			conn->set_proxy_timeout(secondsToMilis(config["proxy_timeout"].asDouble()), ec);
+			conn->set_proxy_timeout(secondsToMilis(config["proxy_timeout"].as_double()), ec);
 			if (ec) {
 				P_ERROR(getLogPrefix()
 					<< "Error setting proxy timeout to "
-					<< config["proxy_timeout"].asDouble() << " seconds: "
+					<< config["proxy_timeout"].as_double() << " seconds: "
 					<< ec.message());
 				return false;
 			}
 		}
 
-		conn->set_open_handshake_timeout(secondsToMilis(config["connect_timeout"].asDouble()));
-		conn->set_pong_timeout(secondsToMilis(config["ping_timeout"].asDouble()));
-		conn->set_close_handshake_timeout(secondsToMilis(config["close_timeout"].asDouble()));
+		conn->set_open_handshake_timeout(secondsToMilis(config["connect_timeout"].as_double()));
+		conn->set_pong_timeout(secondsToMilis(config["ping_timeout"].as_double()));
+		conn->set_close_handshake_timeout(secondsToMilis(config["close_timeout"].as_double()));
 
 		return true;
 	}
@@ -566,8 +568,8 @@ private:
 
 	void scheduleReconnect() {
 		P_NOTICE(getLogPrefix() << "Reestablishing connection in " <<
-			config["reconnect_timeout"].asDouble() << " seconds");
-		restartTimer(secondsToMilis(config["reconnect_timeout"].asDouble()));
+			config["reconnect_timeout"].as_double() << " seconds");
+		restartTimer(secondsToMilis(config["reconnect_timeout"].as_double()));
 	}
 
 	void closeConnection(websocketpp::close::status::value code,
@@ -626,8 +628,8 @@ private:
 		}
 		buffer.clear();
 		P_DEBUG(getLogPrefix() << "Scheduling next ping in " <<
-			config["ping_interval"].asDouble() << " seconds");
-		restartTimer(secondsToMilis(config["ping_interval"].asDouble()));
+			config["ping_interval"].as_double() << " seconds");
+		restartTimer(secondsToMilis(config["ping_interval"].as_double()));
 	}
 
 	void onConnectFailed(ConnectionWeakPtr wconn) {
@@ -741,8 +743,8 @@ private:
 		}
 
 		P_DEBUG(getLogPrefix() << "Pong received. Scheduling next ping in " <<
-			config["ping_interval"].asDouble() << " seconds");
-		restartTimer(secondsToMilis(config["ping_interval"].asDouble()));
+			config["ping_interval"].as_double() << " seconds");
+		restartTimer(secondsToMilis(config["ping_interval"].as_double()));
 	}
 
 	void onMessage(ConnectionWeakPtr wconn, MessagePtr msg) {
@@ -791,9 +793,9 @@ private:
 
 public:
 	WebSocketCommandReverseServer(const Schema &schema, const MessageHandler &_messageHandler,
-		const Json::Value &initialConfig,
+		const json::value &initialConfig,
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
-		: config(schema, initialConfig, translator),
+		: config(schema, initialConfig.get_object(), translator),
 		  configRlz(config),
 		  messageHandler(_messageHandler),
 		  state(UNINITIALIZED),
@@ -838,10 +840,10 @@ public:
 	}
 
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
 	{
-		req.config.reset(new ConfigKit::Store(config, updates, errors));
+		req.config.reset(new ConfigKit::Store(config, updates.get_object(), errors));
 		if (errors.empty()) {
 			req.configRlz.reset(new ConfigRealization(*req.config));
 		}
@@ -854,12 +856,12 @@ public:
 		activateConfigUpdates(req.config.get());
 	}
 
-	Json::Value inspectConfig() const {
+	json::value inspectConfig() const {
 		return config.inspect();
 	}
 
 
-	void asyncPrepareConfigChange(const Json::Value &updates,
+	void asyncPrepareConfigChange(const json::value &updates,
 		ConfigChangeRequest &req,
 		const ConfigKit::CallbackTypes<WebSocketCommandReverseServer>::PrepareConfigChange &callback)
 	{

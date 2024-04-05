@@ -30,12 +30,12 @@ namespace tut {
 		public:
 			TelemetryData mockTelemetryData;
 			long mockResponseCode;
-			Json::Value mockResponse;
+			json::value mockResponse;
 			CURLcode mockCurlResult;
-			Json::Value lastRequestBody;
+			json::value lastRequestBody;
 
 			MyTelemetryCollector(const Schema &schema,
-				const Json::Value &initialConfig = Json::Value(),
+				const json::value &initialConfig = json::value(),
 				const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 				: TelemetryCollector(schema, initialConfig, translator),
 				  mockResponseCode(200),
@@ -46,7 +46,7 @@ namespace tut {
 		};
 
 		TelemetryCollector::Schema schema;
-		Json::Value config;
+		json::value config;
 		MyTelemetryCollector *col;
 
 		Core_TelemetryCollectorTest()

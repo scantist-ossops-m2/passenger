@@ -61,15 +61,15 @@ public:
 	class Schema: public ConfigKit::Schema {
 	private:
 		static void validate(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
-			if (config["min_port_range"].asUInt() > config["max_port_range"].asUInt()) {
+			if (config["min_port_range"].as_uint64() > config["max_port_range"].as_uint64()) {
 				errors.push_back(ConfigKit::Error(
 					"'{{min_port_range}}' must be equal to or smaller than {{max_port_range}}"));
 			}
-			if (config["min_port_range"].asUInt() > 65535) {
+			if (config["min_port_range"].as_uint64() > 65535) {
 				errors.push_back(ConfigKit::Error(
 					"{{min_port_range}} must be equal to or less than 65535"));
 			}
-			if (config["max_port_range"].asUInt() > 65535) {
+			if (config["max_port_range"].as_uint64() > 65535) {
 				errors.push_back(ConfigKit::Error(
 					"{{max_port_range}} must be equal to or less than 65535"));
 			}
@@ -125,8 +125,8 @@ private:
 
 
 	void updateConfigCache() {
-		minPortRange = config["min_port_range"].asUInt();
-		maxPortRange = config["max_port_range"].asUInt();
+		minPortRange = config["min_port_range"].as_uint64();
+		maxPortRange = config["max_port_range"].as_uint64();
 		nextPort = std::max(std::min(nextPort, maxPortRange), minPortRange);
 	}
 
@@ -143,7 +143,7 @@ public:
 	//UnionStation::ContextPtr unionStationContext;
 
 
-	Context(const Schema &schema, const Json::Value &initialConfig = Json::Value())
+	Context(const Schema &schema, const json::value &initialConfig = json::value())
 		: config(schema),
 
 		  finalized(false),
@@ -162,14 +162,14 @@ public:
         updateConfigCache();
 	}
 
-	Json::Value previewConfigUpdate(const Json::Value &updates,
+	json::value previewConfigUpdate(const json::value &updates,
 		vector<ConfigKit::Error> &errors)
 	{
 		boost::lock_guard<boost::mutex> l(syncher);
 		return config.previewUpdate(updates, errors);
 	}
 
-	bool configure(const Json::Value &updates, vector<ConfigKit::Error> &errors) {
+	bool configure(const json::value &updates, vector<ConfigKit::Error> &errors) {
 		boost::lock_guard<boost::mutex> l(syncher);
 		if (config.update(updates, errors)) {
 			updateConfigCache();
@@ -179,7 +179,7 @@ public:
 		}
 	}
 
-	Json::Value inspectConfig() const {
+	json::value inspectConfig() const {
 		boost::lock_guard<boost::mutex> l(syncher);
 		return config.inspect();
 	}

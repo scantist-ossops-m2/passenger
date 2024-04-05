@@ -1,5 +1,5 @@
 #include <TestSupport.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <Core/ApplicationPool/Options.h>
 #include <Core/SpawningKit/SmartSpawner.h>
 #include <LoggingKit/LoggingKit.h>
@@ -32,7 +32,7 @@ namespace tut {
 			context.spawnDir = getSystemTempDir();
 			context.finalize();
 
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["level"] = "warn";
@@ -46,7 +46,7 @@ namespace tut {
 		}
 
 		~Core_SpawningKit_SmartSpawnerTest() {
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["level"] = DEFAULT_LOG_LEVEL_NAME;

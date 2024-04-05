@@ -1,5 +1,5 @@
 #include <TestSupport.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <Core/ApplicationPool/Pool.h>
 #include <LoggingKit/Context.h>
 #include <FileTools/FileManip.h>
@@ -51,7 +51,7 @@ namespace tut {
 			callback.func = _callback;
 			callback.userData = this;
 
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["level"] = "warn";
@@ -75,7 +75,7 @@ namespace tut {
 			UPDATE_TRACE_POINT();
 			pool.reset();
 
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["level"] = DEFAULT_LOG_LEVEL_NAME;

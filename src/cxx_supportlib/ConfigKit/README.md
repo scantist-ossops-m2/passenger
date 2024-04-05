@@ -72,7 +72,7 @@ If B has a lot of configuration options, then writing all these setters (and we 
 
 How do you prevent having to manually write so much code for exposing and configuring all the options exposed by lower-level components? One possible answer consists of the following aspects:
 
- - Configuration should be stored in some kind of key-value data structure, e.g. a Json::Value, instead of in individual class members for each option.
+ - Configuration should be stored in some kind of key-value data structure, e.g. a json::value, instead of in individual class members for each option.
  - There must exist the concept of a configuration schema, and this must be introspectable during runtime, so that higher-level components can manage subcomponents' configuration through automation.
 
 ConfigKit implements these aspects, and also provides various other useful features in the area of configuration management. ConfigKit is built around the concept of introspection during *runtime*. This is not the only approach: static introspection and code generation is another valid approach (which is used by some components in Passenger), but this is outside ConfigKit's scope.
@@ -112,7 +112,7 @@ Everything starts with `ConfigKit::Schema`. This is a class that lets you define
 
 ### ConfigKit::Store
 
-`ConfigKit::Store` is a class that stores configuration values in such a way that it respects a schema. The values supplied to and stored in `ConfigKit::Store` are JSON values (i.e. of the `Json::Value` type), although Store uses the schema to validate that you are actually putting the right JSON types in the Store.
+`ConfigKit::Store` is a class that stores configuration values in such a way that it respects a schema. The values supplied to and stored in `ConfigKit::Store` are JSON values (i.e. of the `json::value` type), although Store uses the schema to validate that you are actually putting the right JSON types in the Store.
 
 `ConfigKit::Store` also keeps track of which values are explicitly supplied and which ones are not.
 
@@ -194,7 +194,7 @@ But ConfigKit also supports *dynamic* default values, by accepting instead of a 
 The main use case for dynamic default values is this: to return something based on another value in the configuration store. For example suppose that your schema defines a `connect_timeout` and a `recv_timeout` option. You want `recv_timeout` to default to two times whatever the effective value of `connect_timeout` is. You can define a default value getter function like this:
 
 ~~~c++
-Json::Value getRecvTimeoutDefaultValue(const ConfigKit::Store &store) {
+json::value getRecvTimeoutDefaultValue(const ConfigKit::Store &store) {
     return store->get("connect_timeout").getInt() * 2;
 }
 
@@ -270,7 +270,7 @@ The above example mainSchema says the following format is valid:
 Nested schema fields simply accept corresponding JSON values, like this:
 
 ~~~c++
-Json::Value initialValue;
+json::value initialValue;
 initialValue["people"][0]["name"] = "John";
 initialValue["people"][0]["age"] = 12;
 initialValue["people"][1]["name"] = "Jane";
@@ -288,8 +288,8 @@ ConfigKit::Schema mainSchema;
 mainSchema.add("people", ARRAY_TYPE, personSchema, REQUIRED);
 mainSchema.finalize();
 
-Json::Value initialValue;
-initialValue["people"][0] = Json::objectValue;
+json::value initialValue;
+initialValue["people"][0] = json::object;
 ConfigKit::Store store(mainSchema, initialValue);
 ~~~
 
@@ -305,7 +305,7 @@ Because personSchema defines a default value of "anonymous" on its "name" field,
 
 ### Inspecting the schema
 
-You can inspect the schema using the `inspect()` method. It returns a Json::Value in the following format:
+You can inspect the schema using the `inspect()` method. It returns a json::value in the following format:
 
 ~~~json
 {
@@ -361,7 +361,7 @@ You can populate the store using the `update()` method. The method also performs
 
 ~~~c++
 vector<ConfigKit::Error> errors;
-Json::Value updates1;
+json::value updates1;
 
 // Validation fails: 'foo' is missing
 store.update(updates1, errors);
@@ -387,7 +387,7 @@ Any further calls to `update()` only update the keys that you actually pass to t
 
 ~~~c++
 // Assuming we are using the store from 'Putting data in the store'.
-Json::Value updates2;
+json::value updates2;
 
 updates2["bar"] = 123.45;
 store.update(updates2, errors);  // => true
@@ -402,7 +402,7 @@ store.get("bar").asDouble();     // => 123.45
 ~~~c++
 // Assuming we are using the store that went through
 // 'Putting data in the store' and 'Updating data'.
-Json::Value updates3;
+json::value updates3;
 
 updates3["unknown"] = true;
 store.update(updates3, errors); // => true
@@ -418,7 +418,7 @@ You can delete data by calling `update()` with null values on the keys you want 
 ~~~c++
 // Assuming we are using the store that went through
 // 'Putting data in the store' and 'Updating data'.
-Json::Value deletionSpec;
+json::value deletionSpec;
 
 deletionSpec["bar"] = Json::nullValue;
 store.update(deletionSpec, errors);
@@ -430,7 +430,7 @@ store.get("bar").isNull();   // => true
 
 ### Fetching data
 
-Use the `get()` method (of which the `[]` operator is an alias) to fetch data from the store. They both return a Json::Value.
+Use the `get()` method (of which the `[]` operator is an alias) to fetch data from the store. They both return a json::value.
 
 ~~~c++
  // Assuming we are using the store that went through
@@ -441,7 +441,7 @@ Use the `get()` method (of which the `[]` operator is an alias) to fetch data fr
 
 ### Default values
 
-If the key is not defined then `get()` either return the default value as defined in the schema, or (if no default value is defined) a null Json::Value.
+If the key is not defined then `get()` either return the default value as defined in the schema, or (if no default value is defined) a null json::value.
 
 ~~~c++
 // Assuming we are using the store that went through
@@ -454,7 +454,7 @@ store.get("unknown").isNull();  // => true
 
 You can fetch an overview of all data in the store using `inspect()`. This function is normally used to allow users of a component to inspect the configuration options set for that component, without allowing them direct access to the embedded store.
 
-This function will return a Json::Value in the following format:
+This function will return a json::value in the following format:
 
 ~~~javascript
 // Assuming we are using the store that went through
@@ -524,8 +524,8 @@ LoggingKit will internally take over ownership of the file descriptor and will p
 An inspect filter is a function takes a value and returns a transformed value. It is installed by calling `setInspectFilter()` on the object returned by `schema.add()`, like this:
 
 ~~~c++
-static Json::Value filterTargetFd(const Json::Value &value) {
-  Json::Value result = value;
+static json::value filterTargetFd(const json::value &value) {
+  json::value result = value;
   result.removeMember("fd");
   return result;
 }
@@ -560,8 +560,8 @@ A normalizer is a function that accepts a JSON document of effective values (in 
 Normalizers are added to the corresponding schema.
 
 ~~~c++
-static Json::Value myNormalizer(const Json::Value &effectiveValues) {
-    Json::Value updates(Json::objectValue);
+static json::value myNormalizer(const json::value &effectiveValues) {
+    json::value updates(json::object);
 
     if (effectiveValues["target"].isString()) {
         updates["target"]["path"] = effectiveValues["target"];
@@ -594,8 +594,8 @@ Suppose that you have a "security" config option that accepts this format:
 If the user did not specify "level", then will want to automatically insert "level: full".
 
 ~~~c++
-static Json::Value myNormalizer(const Json::Value &effectiveValues) {
-    Json::Value updates(Json::objectValue);
+static json::value myNormalizer(const json::value &effectiveValues) {
+    json::value updates(json::object);
 
     if (effectiveValues["security"]["level"].isNull()) {
         updates["security"] = effectiveValues["security"];

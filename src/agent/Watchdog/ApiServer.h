@@ -29,7 +29,7 @@
 #include <string>
 #include <exception>
 #include <cstring>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <modp_b64.h>
 
 #include <Shared/ApiServerUtils.h>
@@ -67,10 +67,10 @@ using namespace std;
  */
 class Schema: public ServerKit::HttpServerSchema {
 private:
-	static Json::Value normalizeAuthorizations(const Json::Value &effectiveValues) {
-		Json::Value updates;
+	static json::object normalizeAuthorizations(const json::object &effectiveValues) {
+		json::object updates;
 		updates["authorizations"] = ApiAccountUtils::normalizeApiAccountsJson(
-			effectiveValues["authorizations"]);
+		    effectiveValues.at("authorizations"));
 		return updates;
 	}
 
@@ -81,7 +81,7 @@ public:
 		using namespace ConfigKit;
 
 		add("fd_passing_password", STRING_TYPE, REQUIRED | SECRET);
-		add("authorizations", ARRAY_TYPE, OPTIONAL | SECRET, Json::arrayValue);
+		add("authorizations", ARRAY_TYPE, OPTIONAL | SECRET, json::array());
 
 		addValidator(boost::bind(ApiAccountUtils::validateAuthorizationsField,
 			"authorizations", boost::placeholders::_1, boost::placeholders::_2));
@@ -100,7 +100,7 @@ struct ConfigChangeRequest {
 class Request: public ServerKit::BaseHttpRequest {
 public:
 	string body;
-	Json::Value jsonBody;
+	json::value jsonBody;
 
 	DEFINE_SERVER_KIT_BASE_HTTP_REQUEST_FOOTER(Request);
 };
@@ -163,9 +163,9 @@ private:
 			}
 
 			HeaderTable headers;
-			Json::Value doc = LoggingKit::context->getConfig().inspect();
+			json::value doc = LoggingKit::context->getConfig().inspect();
 			headers.insert(req->pool, "Content-Type", "application/json");
-			writeSimpleResponse(client, 200, &headers, doc.toStyledString());
+			writeSimpleResponse(client, 200, &headers, json::serialize(doc));
 			if (!req->ended()) {
 				endRequest(&client, &req);
 			}
@@ -184,7 +184,7 @@ private:
 	void processConfigBody(Client *client, Request *req) {
 		HeaderTable headers;
 		LoggingKit::ConfigChangeRequest configReq;
-		const Json::Value &json = req->jsonBody;
+		const json::value &json = req->jsonBody;
 		vector<ConfigKit::Error> errors;
 		bool ok;
 
@@ -234,7 +234,7 @@ private:
 
 		password = psg_lstr_make_contiguous(password, req->pool);
 		return constantTimeCompare(StaticString(password->start->data, password->size),
-			config["fd_passing_password"].asString());
+			config["fd_passing_password"].as_string());
 	}
 
 	void processConfigLogFileFd(Client *client, Request *req) {
@@ -245,9 +245,10 @@ private:
 			HeaderTable headers;
 			headers.insert(req->pool, "Cache-Control", "no-cache, no-store, must-revalidate");
 			headers.insert(req->pool, "Content-Type", "text/plain");
-			if (config["target"].isMember("path")) {
+			json::object &&config_target = config["target"].get_object();
+			if (config_target.contains("path")) {
 				headers.insert(req->pool, "Filename",
-					psg_pstrdup(req->pool, config["target"]["path"].asString()));
+					psg_pstrdup(req->pool, config_target["path"].as_string()));
 			}
 			req->wantKeepAlive = false;
 			writeSimpleResponse(client, 200, &headers, "");
@@ -297,8 +298,9 @@ protected:
 			req->body.append(buffer.start, buffer.size());
 		} else if (errcode == 0) {
 			// EOF
-			Json::Reader reader;
-			if (reader.parse(req->body, req->jsonBody)) {
+			error_code ec;
+			req->jsonBody = json::parse(req->body, ec);
+			if (!ec) {
 				try {
 					processConfigBody(client, req);
 				} catch (const oxt::tracable_exception &e) {
@@ -309,7 +311,7 @@ protected:
 					}
 				}
 			} else {
-				apiServerRespondWith422(this, client, req, reader.getFormattedErrorMessages());
+				apiServerRespondWith422(this, client, req, ec.message());
 			}
 		} else {
 			// Error
@@ -320,8 +322,8 @@ protected:
 
 	virtual void deinitializeRequest(Client *client, Request *req) {
 		req->body.clear();
-		if (!req->jsonBody.isNull()) {
-			req->jsonBody = Json::Value();
+		if (!req->jsonBody.is_null()) {
+			req->jsonBody = json::value();
 		}
 		ParentClass::deinitializeRequest(client, req);
 	}
@@ -333,7 +335,7 @@ public:
 	EventFd *exitEvent;
 
 	ApiServer(ServerKit::Context *context, const Schema &schema,
-		const Json::Value &initialConfig,
+		const json::value &initialConfig,
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: ParentClass(context, schema, initialConfig, translator),
 		  exitEvent(NULL)
@@ -370,7 +372,7 @@ public:
 	}
 
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
 	{
 		if (ParentClass::prepareConfigChange(updates, errors, req.forParent)) {

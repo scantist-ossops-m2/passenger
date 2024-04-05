@@ -27,7 +27,7 @@
 #define _PASSENGER_LIBEV_JSON_UTILS_H_
 
 #include <ev.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <cstring>
 #include <ctime>
 #include <StrIntTools/StrIntUtils.h>
@@ -50,17 +50,17 @@ using namespace std;
  *     //   "relative": "10s ago"
  *     // }
  */
-inline Json::Value
+inline json::value
 evTimeToJson(ev_tstamp evTime, ev_tstamp evNow, unsigned long long now = 0) {
 	if (evTime <= 0) {
-		return Json::Value(Json::nullValue);
+		return json::value(nullptr);
 	}
 
 	if (now == 0) {
 		now = SystemTime::getUsec();
 	}
 
-	Json::Value doc;
+	json::object doc;
 	unsigned long long wallClockTimeUsec = now
 		+ llround((evTime - evNow) * 1000000);
 	time_t wallClockTime = (time_t) (wallClockTimeUsec / 1000000ull);

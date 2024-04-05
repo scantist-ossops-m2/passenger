@@ -41,7 +41,7 @@ namespace tut {
 
 	TEST_METHOD(6) {
 		set_test_name("Validating required keys with the right value types");
-		Json::Value doc;
+		json::value doc;
 
 		schema.add("string", ConfigKit::STRING_TYPE, ConfigKit::REQUIRED);
 		schema.add("integer", ConfigKit::INT_TYPE, ConfigKit::REQUIRED);
@@ -76,19 +76,19 @@ namespace tut {
 		ensure(schema.validateValue("any", -123, errors));
 		ensure(schema.validateValue("any", true, errors));
 		ensure(schema.validateValue("any", Json::arrayValue, errors));
-		ensure(schema.validateValue("any", Json::objectValue, errors));
+		ensure(schema.validateValue("any", json::object, errors));
 
-		doc = Json::Value(Json::arrayValue);
+		doc = json::value(Json::arrayValue);
 		doc.append("string");
 		doc.append(123);
 		ensure(schema.validateValue("array", doc, errors));
 
-		doc = Json::Value(Json::arrayValue);
+		doc = json::value(Json::arrayValue);
 		doc.append("string");
 		doc.append("string");
 		ensure(schema.validateValue("string_array", doc, errors));
 
-		doc = Json::Value(Json::objectValue);
+		doc = json::value(json::object);
 		doc["string"] = "string";
 		doc["int"] = 123;
 		ensure(schema.validateValue("object", doc, errors));
@@ -96,7 +96,7 @@ namespace tut {
 
 	TEST_METHOD(7) {
 		set_test_name("Validating required keys with the wrong value types");
-		Json::Value doc;
+		json::value doc;
 
 		schema.add("integer", ConfigKit::INT_TYPE, ConfigKit::REQUIRED);
 		schema.add("integer_unsigned", ConfigKit::UINT_TYPE, ConfigKit::REQUIRED);
@@ -125,7 +125,7 @@ namespace tut {
 		ensure(!schema.validateValue("string_array", "string", errors));
 		ensure_equals(errors.back().getMessage(), "'string_array' must be an array");
 
-		doc = Json::Value(Json::arrayValue);
+		doc = json::value(Json::arrayValue);
 		doc.append(123);
 		doc.append("string");
 		ensure(!schema.validateValue("string_array", doc, errors));
@@ -148,7 +148,7 @@ namespace tut {
 
 	TEST_METHOD(11) {
 		set_test_name("Validating optional keys with the right value types");
-		Json::Value doc;
+		json::value doc;
 
 		schema.add("string", ConfigKit::STRING_TYPE, ConfigKit::OPTIONAL);
 		schema.add("integer", ConfigKit::INT_TYPE, ConfigKit::OPTIONAL);
@@ -183,19 +183,19 @@ namespace tut {
 		ensure(schema.validateValue("any", -123, errors));
 		ensure(schema.validateValue("any", true, errors));
 		ensure(schema.validateValue("any", Json::arrayValue, errors));
-		ensure(schema.validateValue("any", Json::objectValue, errors));
+		ensure(schema.validateValue("any", json::object, errors));
 
-		doc = Json::Value(Json::arrayValue);
+		doc = json::value(Json::arrayValue);
 		doc.append("string");
 		doc.append(123);
 		ensure(schema.validateValue("array", doc, errors));
 
-		doc = Json::Value(Json::arrayValue);
+		doc = json::value(Json::arrayValue);
 		doc.append("string");
 		doc.append("string");
 		ensure(schema.validateValue("string_array", doc, errors));
 
-		doc = Json::Value(Json::objectValue);
+		doc = json::value(json::object);
 		doc["string"] = "string";
 		doc["int"] = 123;
 		ensure(schema.validateValue("object", doc, errors));
@@ -203,7 +203,7 @@ namespace tut {
 
 	TEST_METHOD(12) {
 		set_test_name("Validating optional keys with the wrong value types");
-		Json::Value doc;
+		json::value doc;
 
 		schema.add("integer", ConfigKit::INT_TYPE, ConfigKit::OPTIONAL);
 		schema.add("integer_unsigned", ConfigKit::UINT_TYPE, ConfigKit::OPTIONAL);
@@ -229,7 +229,7 @@ namespace tut {
 		ensure(!schema.validateValue("string_array", "string", errors));
 		ensure_equals(errors.back().getMessage(), "'string_array' must be an array");
 
-		doc = Json::Value(Json::arrayValue);
+		doc = json::value(Json::arrayValue);
 		doc.append(123);
 		doc.append("string");
 		ensure(!schema.validateValue("string_array", doc, errors));
@@ -248,7 +248,7 @@ namespace tut {
 		schema.add("secret", ConfigKit::INT_TYPE, ConfigKit::REQUIRED | ConfigKit::SECRET);
 		schema.finalize();
 
-		Json::Value doc = schema.inspect();
+		json::value doc = schema.inspect();
 		ensure(doc["secret"]["secret"].asBool());
 	}
 }

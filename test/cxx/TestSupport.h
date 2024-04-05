@@ -27,7 +27,6 @@
 #include <ProcessManagement/Utils.h>
 #include <Utils.h>
 #include <SystemTools/SystemTime.h>
-#include <jsoncpp/json-forwards.h>
 
 extern "C" {
 	struct ev_loop;
@@ -101,7 +100,7 @@ using namespace oxt;
 
 extern LoggingKit::Level defaultLogLevel;
 extern ResourceLocator *resourceLocator;
-extern Json::Value testConfig;
+extern json::value testConfig;
 
 
 /**

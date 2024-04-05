@@ -318,10 +318,6 @@ COMMON_LIBRARY = CommonLibraryBuilder.new do
   define_component 'Utils.o',
     :source   => 'Utils.cpp',
     :category => :base
-  define_component 'jsoncpp.o',
-    :source   => 'vendor-modified/jsoncpp/jsoncpp.cpp',
-    :category => :base,
-    :optimize => true
 
   define_component 'SecurityKit/Crypto.o',
     :source   => 'SecurityKit/Crypto.cpp',

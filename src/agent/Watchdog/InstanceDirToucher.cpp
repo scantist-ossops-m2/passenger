@@ -112,7 +112,7 @@ private:
 
 	void
 	threadMain() {
-		string originalOomScore = wo->extraConfigToPassToSubAgents["oom_score"].asString();
+		string originalOomScore = getJsonStringField(wo->extraConfigToPassToSubAgents,"oom_score");
 		string workingDir = wo->instanceDir->getPath().c_str();
 
 		while (!boost::this_thread::interruption_requested()) {

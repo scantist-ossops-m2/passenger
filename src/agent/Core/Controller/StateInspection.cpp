@@ -51,33 +51,33 @@ Controller::getThreadNumber() const {
 	return mainConfig.threadNumber;
 }
 
-Json::Value
+json::value
 Controller::inspectStateAsJson() const {
-	Json::Value doc = ParentClass::inspectStateAsJson();
+	json::value doc = ParentClass::inspectStateAsJson();
 	if (turboCaching.isEnabled()) {
-		Json::Value subdoc;
+		json::object subdoc;
 		subdoc["fetches"] = turboCaching.responseCache.getFetches();
 		subdoc["hits"] = turboCaching.responseCache.getHits();
 		subdoc["hit_ratio"] = turboCaching.responseCache.getHitRatio();
 		subdoc["stores"] = turboCaching.responseCache.getStores();
 		subdoc["store_successes"] = turboCaching.responseCache.getStoreSuccesses();
 		subdoc["store_success_ratio"] = turboCaching.responseCache.getStoreSuccessRatio();
-		doc["turbocaching"] = subdoc;
+		doc.at("turbocaching") = subdoc;
 	}
 	return doc;
 }
 
-Json::Value
+json::value
 Controller::inspectClientStateAsJson(const Client *client) const {
-	Json::Value doc = ParentClass::inspectClientStateAsJson(client);
-	doc["connected_at"] = evTimeToJson(client->connectedAt, ev_now(getLoop()));
+	json::value doc = ParentClass::inspectClientStateAsJson(client);
+	doc.at("connected_at") = evTimeToJson(client->connectedAt, ev_now(getLoop()));
 	return doc;
 }
 
-Json::Value
+json::value
 Controller::inspectRequestStateAsJson(const Request *req) const {
-	Json::Value doc = ParentClass::inspectRequestStateAsJson(req);
-	Json::Value flags;
+	json::object doc = ParentClass::inspectRequestStateAsJson(req).get_object();
+	json::object flags;
 	const AppResponse *resp = &req->appResponse;
 
 	if (req->startedAt != 0) {
@@ -100,13 +100,14 @@ Controller::inspectRequestStateAsJson(const Request *req) const {
 	}
 
 	if (req->session != NULL) {
-		Json::Value &sessionDoc = doc["session"] = Json::Value(Json::objectValue);
+		doc["session"] = json::object();
+		json::object &sessionDoc = doc["session"].get_object();
 		const AbstractSession *session = req->session.get();
 
 		if (req->session->isClosed()) {
 			sessionDoc["closed"] = true;
 		} else {
-			sessionDoc["pid"] = (Json::Int64) session->getPid();
+			sessionDoc["pid"] = (int64_t) session->getPid();
 			sessionDoc["gupid"] = session->getGupid().toString();
 		}
 	}

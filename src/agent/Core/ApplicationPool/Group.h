@@ -482,8 +482,8 @@ public:
 	bool garbageCollectable(unsigned long long now = 0) const;
 
 	void inspectXml(std::ostream &stream, bool includeSecrets = true) const;
-	void inspectPropertiesInAdminPanelFormat(Json::Value &result) const;
-	void inspectConfigInAdminPanelFormat(Json::Value &result) const;
+	void inspectPropertiesInAdminPanelFormat(json::object &result) const;
+	void inspectConfigInAdminPanelFormat(json::object &result) const;
 
 	/****** Out-of-band work ******/
 

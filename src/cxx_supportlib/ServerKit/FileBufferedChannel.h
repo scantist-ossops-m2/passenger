@@ -33,7 +33,7 @@
 #include <boost/atomic.hpp>
 #include <sys/types.h>
 #include <uv.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
@@ -1583,32 +1583,33 @@ public:
 		Channel::hooks = hooks;
 	}
 
-	Json::Value inspectAsJson() const {
-		Json::Value doc = Channel::inspectAsJson();
+	json::value inspectAsJson() const {
+		json::value doc = Channel::inspectAsJson();
+		json::object &odoc = doc.get_object();
 
 		switch (mode) {
 		case IN_MEMORY_MODE:
-			doc["mode"] = "IN_MEMORY_MODE";
+			odoc["mode"] = "IN_MEMORY_MODE";
 			break;
 		case IN_FILE_MODE:
-			doc["mode"] = "IN_FILE_MODE";
-			doc["writer_state"] = getWriterStateString();
-			doc["read_offset"] = byteSizeToJson(inFileMode->readOffset);
-			doc["written"] = signedByteSizeToJson(inFileMode->written);
+			odoc["mode"] = "IN_FILE_MODE";
+			odoc["writer_state"] = getWriterStateString();
+			odoc["read_offset"] = byteSizeToJson(inFileMode->readOffset);
+			odoc["written"] = signedByteSizeToJson(inFileMode->written);
 			break;
 		case ERROR:
-			doc["mode"] = "ERROR";
+			odoc["mode"] = "ERROR";
 			break;
 		case ERROR_WAITING:
-			doc["mode"] = "ERROR_WAITING";
+			odoc["mode"] = "ERROR_WAITING";
 			break;
 		default:
 			break;
 		}
 
-		doc["reader_state"] = getReaderStateString();
-		doc["nbuffers"] = nbuffers;
-		doc["bytes_buffered"] = byteSizeToJson(getBytesBuffered());
+		odoc["reader_state"] = getReaderStateString();
+		odoc["nbuffers"] = nbuffers;
+		odoc["bytes_buffered"] = byteSizeToJson(getBytesBuffered());
 
 		return doc;
 	}

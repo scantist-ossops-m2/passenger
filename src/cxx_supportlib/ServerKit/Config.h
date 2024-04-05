@@ -38,6 +38,7 @@
 
 #include <ConfigKit/ConfigKit.h>
 #include <FileTools/PathManip.h>
+#include <JsonTools/JsonUtils.h>
 #include <Constants.h>
 #include <Utils.h>
 
@@ -65,15 +66,15 @@ using namespace std;
  */
 class Schema: public ConfigKit::Schema {
 private:
-	static Json::Value getDefaultFileBufferedChannelBufferDir(const ConfigKit::Store &config) {
+	static json::value getDefaultFileBufferedChannelBufferDir(const ConfigKit::Store &config) {
 		return getSystemTempDir();
 	}
 
-	static Json::Value normalize(const Json::Value &effectiveValues) {
-		Json::Value updates;
+	static json::object normalize(const json::object &effectiveValues) {
+		json::object updates;
 
 		updates["file_buffered_channel_buffer_dir"] = absolutizePath(
-			effectiveValues["file_buffered_channel_buffer_dir"].asString());
+			getJsonStaticStringField(effectiveValues,"file_buffered_channel_buffer_dir"));
 
 		return updates;
 	}
@@ -111,12 +112,12 @@ struct FileBufferedChannelConfig {
 	bool autoStartMover;
 
 	FileBufferedChannelConfig(const ConfigKit::Store &config)
-		: bufferDir(config["file_buffered_channel_buffer_dir"].asString()),
-		  threshold(config["file_buffered_channel_threshold"].asUInt()),
-		  delayInFileModeSwitching(config["file_buffered_channel_delay_in_file_mode_switching"].asUInt()),
-		  maxDiskChunkReadSize(config["file_buffered_channel_max_disk_chunk_read_size"].asUInt()),
-		  autoTruncateFile(config["file_buffered_channel_auto_truncate_file"].asBool()),
-		  autoStartMover(config["file_buffered_channel_auto_start_mover"].asBool())
+		: bufferDir(jsonValueToString(config["file_buffered_channel_buffer_dir"])),
+		  threshold(config["file_buffered_channel_threshold"].as_uint64()),
+		  delayInFileModeSwitching(config["file_buffered_channel_delay_in_file_mode_switching"].as_uint64()),
+		  maxDiskChunkReadSize(config["file_buffered_channel_max_disk_chunk_read_size"].as_uint64()),
+		  autoTruncateFile(config["file_buffered_channel_auto_truncate_file"].as_bool()),
+		  autoStartMover(config["file_buffered_channel_auto_start_mover"].as_bool())
 		{ }
 
 	void swap(FileBufferedChannelConfig &other) BOOST_NOEXCEPT_OR_NOTHROW {
@@ -134,7 +135,7 @@ struct Config {
 	FileBufferedChannelConfig fileBufferedChannelConfig;
 
 	Config(const ConfigKit::Store &config)
-		: secureModePassword(config["secure_mode_password"].asString()),
+		: secureModePassword(jsonValueToString(config["secure_mode_password"])),
 		  fileBufferedChannelConfig(config)
 		{ }
 

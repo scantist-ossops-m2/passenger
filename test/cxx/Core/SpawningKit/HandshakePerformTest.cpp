@@ -48,7 +48,7 @@ namespace tut {
 		}
 
 		~Core_SpawningKit_HandshakePerformTest() {
-			Json::Value config;
+			json::value config;
 			vector<ConfigKit::Error> errors;
 			LoggingKit::ConfigChangeRequest req;
 			config["level"] = DEFAULT_LOG_LEVEL_NAME;
@@ -83,8 +83,8 @@ namespace tut {
 			counter++;
 		}
 
-		static Json::Value createGoodPropertiesJson() {
-			Json::Value socket, doc;
+		static json::value createGoodPropertiesJson() {
+			json::value socket, doc;
 			socket["address"] = "tcp://127.0.0.1:3000";
 			socket["protocol"] = "http";
 			socket["concurrency"] = 1;
@@ -271,7 +271,7 @@ namespace tut {
 		HandshakePerform performer(*session, pid, FileDescriptor(), p.first);
 		performer.debugSupport = &debugSupport;
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		LoggingKit::ConfigChangeRequest req;
 		config["app_output_log_level"] = "debug";
@@ -483,7 +483,7 @@ namespace tut {
 			" least one request-handling socket in properties.json, yet the file does"
 			" not specify any");
 
-		Json::Value socket, doc;
+		json::value socket, doc;
 		socket["address"] = "tcp://127.0.0.1:3000";
 		socket["protocol"] = "http";
 		socket["concurrency"] = 1;
@@ -523,7 +523,7 @@ namespace tut {
 			" least one preloader command socket in properties.json, yet the file does"
 			" not specify any");
 
-		Json::Value socket, doc;
+		json::value socket, doc;
 		socket["address"] = "tcp://127.0.0.1:3000";
 		socket["protocol"] = "http";
 		socket["concurrency"] = 1;
@@ -567,7 +567,7 @@ namespace tut {
 
 		context.instanceDir = absolutizePath("tmp.instance");
 		init(SPAWN_DIRECTLY);
-		Json::Value doc = createGoodPropertiesJson();
+		json::value doc = createGoodPropertiesJson();
 		doc["sockets"][0]["address"] = "unix:/foo";
 		createFile(session->responseDir + "/properties.json", doc.toStyledString());
 		TempThread thr(boost::bind(&Core_SpawningKit_HandshakePerformTest::signalFinish, this));
@@ -594,7 +594,7 @@ namespace tut {
 		string socketPath = absolutizePath("tmp.instance/apps.s/foo.sock");
 
 		init(SPAWN_DIRECTLY);
-		Json::Value doc = createGoodPropertiesJson();
+		json::value doc = createGoodPropertiesJson();
 		doc["sockets"][0]["address"] = "unix:" + socketPath;
 		createFile(session->responseDir + "/properties.json", doc.toStyledString());
 		safelyClose(createUnixServer(socketPath));
@@ -667,7 +667,7 @@ namespace tut {
 	TEST_METHOD(53) {
 		set_test_name("The exception contains the subprocess' output");
 
-		Json::Value config;
+		json::value config;
 		vector<ConfigKit::Error> errors;
 		LoggingKit::ConfigChangeRequest req;
 		config["app_output_log_level"] = "debug";

@@ -23,6 +23,7 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  *  THE SOFTWARE.
  */
+#include <boost/json.hpp>
 #include <Core/ApplicationPool/Pool.h>
 
 /*************************************************************************
@@ -258,10 +259,10 @@ Pool::toXml(const ToXmlOptions &options, bool lock) const {
 	return result.str();
 }
 
-Json::Value
+json::value
 Pool::inspectPropertiesInAdminPanelFormat(const ToJsonOptions &options) const {
 	ScopedLock l(syncher);
-	Json::Value result(Json::objectValue);
+	json::object result;
 	GroupMap::ConstIterator g_it(groups);
 	ProcessList::const_iterator p_it;
 
@@ -289,7 +290,7 @@ Pool::inspectPropertiesInAdminPanelFormat(const ToJsonOptions &options) const {
 			continue;
 		}
 
-		Json::Value groupDoc(Json::objectValue);
+		json::object groupDoc;
 		group->inspectPropertiesInAdminPanelFormat(groupDoc);
 		result[group->info.name] = groupDoc;
 
@@ -299,10 +300,10 @@ Pool::inspectPropertiesInAdminPanelFormat(const ToJsonOptions &options) const {
 	return result;
 }
 
-Json::Value
+json::value
 Pool::inspectConfigInAdminPanelFormat(const ToJsonOptions &options) const {
 	ScopedLock l(syncher);
-	Json::Value result(Json::objectValue);
+	json::object result;
 	GroupMap::ConstIterator g_it(groups);
 	ProcessList::const_iterator p_it;
 
@@ -330,7 +331,7 @@ Pool::inspectConfigInAdminPanelFormat(const ToJsonOptions &options) const {
 			continue;
 		}
 
-		Json::Value groupDoc(Json::objectValue);
+		json::object groupDoc;
 		group->inspectConfigInAdminPanelFormat(groupDoc);
 		result[group->info.name] = groupDoc;
 
@@ -341,48 +342,50 @@ Pool::inspectConfigInAdminPanelFormat(const ToJsonOptions &options) const {
 }
 
 
-Json::Value
-Pool::makeSingleValueJsonConfigFormat(const Json::Value &val, const Json::Value &defaultValue) {
-	Json::Value ary(Json::arrayValue);
+json::value
+Pool::makeSingleValueJsonConfigFormat(const json::value &val, const json::value &defaultValue) {
+	json::array ary;
 
 	if (val != defaultValue) {
-		Json::Value entry;
+		json::object entry;
 
 		entry["value"] = val;
-		entry["source"]["type"] = "ephemeral";
+		entry["source"] = json::object();
+		entry["source"].get_object()["type"] = "ephemeral";
 
-		ary.append(entry);
+		ary.push_back(entry);
 	}
 
-	if (!defaultValue.isNull()) {
-		Json::Value entry;
+	if (!defaultValue.is_null()) {
+		json::object entry;
 
 		entry["value"] = defaultValue;
-		entry["source"]["type"] = "default";
+		entry["source"] = json::object();
+		entry["source"].get_object()["type"] = "default";
 
-		ary.append(entry);
+		ary.push_back(entry);
 	}
 
 	return ary;
 }
 
-Json::Value
+json::value
 Pool::makeSingleStrValueJsonConfigFormat(const StaticString &val) {
 	return makeSingleValueJsonConfigFormat(
-		Json::Value(val.data(), val.data() + val.size()));
+		json::string(val.data(), val.data() + val.size()));
 }
 
-Json::Value
+json::value
 Pool::makeSingleStrValueJsonConfigFormat(const StaticString &val, const StaticString &defaultValue) {
 	return makeSingleValueJsonConfigFormat(
-		Json::Value(val.data(), val.data() + val.size()),
-		Json::Value(defaultValue.data(), defaultValue.data() + defaultValue.size()));
+		json::string(val.data(), val.data() + val.size()),
+		json::string(defaultValue.data(), defaultValue.data() + defaultValue.size()));
 }
 
-Json::Value
+json::value
 Pool::makeSingleNonEmptyStrValueJsonConfigFormat(const StaticString &val) {
 	if (val.empty()) {
-		return Json::arrayValue;
+		return json::array();
 	} else {
 		return makeSingleStrValueJsonConfigFormat(val);
 	}

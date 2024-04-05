@@ -30,7 +30,7 @@
 #include <cstddef>
 #include <string>
 #include <boost/function.hpp>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include "../Config.h"
 #include "../Utils.h"
@@ -61,7 +61,7 @@ using namespace std;
 
 class ConfigManifestGenerator {
 private:
-	Json::Value manifest;
+	json::value manifest;
 	server_rec *serverRec;
 	apr_pool_t *pool;
 
@@ -85,7 +85,7 @@ private:
 	void findOrCreateAppAndLocOptionsContainers(server_rec *serverRec,
 		core_server_config *csconf, core_dir_config *cdconf,
 		DirConfig *pdconf, DirConfigContext context,
-		Json::Value **appOptionsContainer, Json::Value **locOptionsContainer)
+		json::value **appOptionsContainer, json::value **locOptionsContainer)
 	{
 		if (*appOptionsContainer != NULL && *locOptionsContainer != NULL) {
 			return;
@@ -96,7 +96,7 @@ private:
 			*locOptionsContainer = &manifest["default_location_configuration"];
 		} else if (context == DCC_VHOST) {
 			string appGroupName = inferLocConfAppGroupName(csconf, pdconf);
-			Json::Value &appConfigContainer = findOrCreateAppConfigContainer(appGroupName);
+			json::value &appConfigContainer = findOrCreateAppConfigContainer(appGroupName);
 			*appOptionsContainer = &appConfigContainer["options"];
 			*locOptionsContainer = &appConfigContainer["default_location_configuration"];
 
@@ -113,8 +113,8 @@ private:
 		} else {
 			// We are inside a <Directory> or <Location>
 			string appGroupName = inferLocConfAppGroupName(csconf, pdconf);
-			Json::Value &appConfigContainer = findOrCreateAppConfigContainer(appGroupName);
-			Json::Value &locConfigContainer = findOrCreateLocConfigContainer(appConfigContainer,
+			json::value &appConfigContainer = findOrCreateAppConfigContainer(appGroupName);
+			json::value &locConfigContainer = findOrCreateLocConfigContainer(appConfigContainer,
 				serverRec, cdconf, pdconf);
 			*appOptionsContainer = &appConfigContainer["options"];
 			*locOptionsContainer = &locConfigContainer["options"];
@@ -151,21 +151,21 @@ private:
 		return absolutizePath(csconf->ap_document_root + P_STATIC_STRING("/.."));
 	}
 
-	Json::Value	&findOrCreateAppConfigContainer(const string &appGroupName) {
-		Json::Value &result = manifest["application_configurations"][appGroupName];
+	json::value	&findOrCreateAppConfigContainer(const string &appGroupName) {
+		json::value &result = manifest["application_configurations"][appGroupName];
 		if (result.isNull()) {
-			result["options"] = Json::objectValue;
-			result["default_location_configuration"] = Json::objectValue;
+			result["options"] = json::object;
+			result["default_location_configuration"] = json::object;
 			result["location_configurations"] = Json::arrayValue;
 		}
 		return result;
 	}
 
-	Json::Value &findOrCreateLocConfigContainer(Json::Value &appConfigContainer,
+	json::value &findOrCreateLocConfigContainer(json::value &appConfigContainer,
 		server_rec *serverRec, core_dir_config *cdconf, DirConfig *pdconf)
 	{
-		Json::Value &locConfigsContainer = appConfigContainer["location_configurations"];
-		Json::Value *locConfigContainer = findLocConfigContainer(
+		json::value &locConfigsContainer = appConfigContainer["location_configurations"];
+		json::value *locConfigContainer = findLocConfigContainer(
 			locConfigsContainer, serverRec, cdconf, pdconf);
 		if (locConfigContainer == NULL) {
 			locConfigContainer = &createLocConfigContainer(locConfigsContainer,
@@ -174,13 +174,13 @@ private:
 		return *locConfigContainer;
 	}
 
-	Json::Value *findLocConfigContainer(Json::Value &locConfigsContainer,
+	json::value *findLocConfigContainer(json::value &locConfigsContainer,
 		server_rec *serverRec, core_dir_config *cdconf, DirConfig *pdconf)
 	{
-		Json::Value::iterator it, end = locConfigsContainer.end();
+		json::value::iterator it, end = locConfigsContainer.end();
 		for (it = locConfigsContainer.begin(); it != end; it++) {
-			Json::Value &locConfigContainer = *it;
-			Json::Value &locationMatcherDoc = locConfigContainer["location_matcher"];
+			json::value &locConfigContainer = *it;
+			json::value &locationMatcherDoc = locConfigContainer["location_matcher"];
 			string jsonLocationMatcherType = locationMatcherDoc["type"].asString();
 
 			if (cdconf->r != NULL) {
@@ -198,7 +198,7 @@ private:
 				continue;
 			}
 
-			Json::Value &serverNamesDoc =
+			json::value &serverNamesDoc =
 				locConfigContainer["web_server_virtual_host"]["server_names"];
 			if (!matchesAnyServerNames(serverRec, serverNamesDoc)) {
 				continue;
@@ -210,17 +210,17 @@ private:
 		return NULL;
 	}
 
-	Json::Value &createLocConfigContainer(Json::Value &locConfigsContainer,
+	json::value &createLocConfigContainer(json::value &locConfigsContainer,
 		server_rec *serverRec, core_dir_config *cdconf, DirConfig *pdconf)
 	{
-		Json::Value vhostDoc;
+		json::value vhostDoc;
 		if (serverRec->defn_name) {
 			vhostDoc["server_names"].append(serverRec->defn_name);
 		} else {
 			vhostDoc["server_names"].append("NOT_RECEIVED");
 		}
 
-		Json::Value locationMatcherDoc;
+		json::value locationMatcherDoc;
 		locationMatcherDoc["value"] = cdconf->d;
 		if (cdconf->r != NULL) {
 			locationMatcherDoc["type"] = "regex";
@@ -228,15 +228,15 @@ private:
 			locationMatcherDoc["type"] = "prefix";
 		}
 
-		Json::Value locConfigContainer;
+		json::value locConfigContainer;
 		locConfigContainer["web_server_virtual_host"] = vhostDoc;
 		locConfigContainer["location_matcher"] = locationMatcherDoc;
-		locConfigContainer["options"] = Json::objectValue;
+		locConfigContainer["options"] = json::object;
 		return locConfigsContainer.append(locConfigContainer);
 	}
 
-	bool matchesAnyServerNames(server_rec *serverRec, const Json::Value &serverNamesDoc) {
-		Json::Value::const_iterator it, end = serverNamesDoc.end();
+	bool matchesAnyServerNames(server_rec *serverRec, const json::value &serverNamesDoc) {
+		json::value::const_iterator it, end = serverNamesDoc.end();
 
 		for (it = serverNamesDoc.begin(); it != end; it++) {
 			// TODO: lowercase match
@@ -248,41 +248,41 @@ private:
 		return false;
 	}
 
-	Json::Value &findOrCreateOptionContainer(Json::Value &optionsContainer,
+	json::value &findOrCreateOptionContainer(json::value &optionsContainer,
 		const char *optionName, size_t optionNameLen)
 	{
-		Json::Value &result = optionsContainer[string(optionName, optionNameLen)];
+		json::value &result = optionsContainer[string(optionName, optionNameLen)];
 		if (result.isNull()) {
 			initOptionContainer(result);
 		}
 		return result;
 	}
 
-	void initOptionContainer(Json::Value &doc) {
+	void initOptionContainer(json::value &doc) {
 		doc["value_hierarchy"] = Json::arrayValue;
 	}
 
-	Json::Value &addOptionContainerHierarchyMember(Json::Value &optionContainer,
+	json::value &addOptionContainerHierarchyMember(json::value &optionContainer,
 		const StaticString &sourceFile, unsigned int sourceLine)
 	{
-		Json::Value hierarchyMember;
+		json::value hierarchyMember;
 		hierarchyMember["source"]["type"] = "web-server-config";
-		hierarchyMember["source"]["path"] = Json::Value(sourceFile.data(),
+		hierarchyMember["source"]["path"] = json::value(sourceFile.data(),
 			sourceFile.data() + sourceFile.size());
 		hierarchyMember["source"]["line"] = sourceLine;
 		return optionContainer["value_hierarchy"].append(hierarchyMember);
 	}
 
 	void reverseValueHierarchies() {
-		Json::Value &appConfigsContainer = manifest["application_configurations"];
-		Json::Value::iterator it, end = appConfigsContainer.end();
+		json::value &appConfigsContainer = manifest["application_configurations"];
+		json::value::iterator it, end = appConfigsContainer.end();
 
 		reverseValueHierarchiesInOptionsContainer(manifest["global_configuration"]);
 		reverseValueHierarchiesInOptionsContainer(manifest["default_application_configuration"]);
 		reverseValueHierarchiesInOptionsContainer(manifest["default_location_configuration"]);
 
 		for (it = appConfigsContainer.begin(); it != end; it++) {
-			Json::Value &appConfigContainer = *it;
+			json::value &appConfigContainer = *it;
 
 			reverseValueHierarchiesInOptionsContainer(
 				appConfigContainer["options"]);
@@ -290,11 +290,11 @@ private:
 				appConfigContainer["default_location_configuration"]);
 
 			if (appConfigContainer.isMember("location_configurations")) {
-				Json::Value &locationConfigsContainer = appConfigContainer["location_configurations"];
-				Json::Value::iterator it2, end2 = locationConfigsContainer.end();
+				json::value &locationConfigsContainer = appConfigContainer["location_configurations"];
+				json::value::iterator it2, end2 = locationConfigsContainer.end();
 
 				for (it2 = locationConfigsContainer.begin(); it2 != end2; it2++) {
-					Json::Value &locationConfigContainer = *it2;
+					json::value &locationConfigContainer = *it2;
 					reverseValueHierarchiesInOptionsContainer(
 						locationConfigContainer["options"]);
 				}
@@ -302,12 +302,12 @@ private:
 		}
 	}
 
-	void reverseValueHierarchiesInOptionsContainer(Json::Value &optionsContainer) {
-		Json::Value::iterator it, end = optionsContainer.end();
+	void reverseValueHierarchiesInOptionsContainer(json::value &optionsContainer) {
+		json::value::iterator it, end = optionsContainer.end();
 
 		for (it = optionsContainer.begin(); it != end; it++) {
-			Json::Value &optionContainer = *it;
-			Json::Value &valueHierarchyDoc = optionContainer["value_hierarchy"];
+			json::value &optionContainer = *it;
+			json::value &valueHierarchyDoc = optionContainer["value_hierarchy"];
 			unsigned int len = valueHierarchyDoc.size();
 
 			for (unsigned int i = 0; i < len / 2; i++) {
@@ -317,17 +317,17 @@ private:
 	}
 
 	void inheritApplicationValueHierarchies() {
-		Json::Value &appConfigsContainer = manifest["application_configurations"];
-		Json::Value &defaultAppConfigContainer = manifest["default_application_configuration"];
-		Json::Value::iterator it, end = appConfigsContainer.end();
+		json::value &appConfigsContainer = manifest["application_configurations"];
+		json::value &defaultAppConfigContainer = manifest["default_application_configuration"];
+		json::value::iterator it, end = appConfigsContainer.end();
 
 		/* Iterate through all 'application_configurations' objects */
 		for (it = appConfigsContainer.begin(); it != end; it++) {
-			Json::Value &appConfigContainer = *it;
-			Json::Value::iterator it2, end2;
+			json::value &appConfigContainer = *it;
+			json::value::iterator it2, end2;
 
 			/* Iterate through all its 'options' objects */
-			Json::Value &optionsContainer = appConfigContainer["options"];
+			json::value &optionsContainer = appConfigContainer["options"];
 			end2 = optionsContainer.end();
 			for (it2 = optionsContainer.begin(); it2 != end2; it2++) {
 				/* For each option, inherit the value hierarchies
@@ -342,10 +342,10 @@ private:
 				const char *optionName = it2.memberName(&optionNameEnd);
 
 				if (defaultAppConfigContainer.isMember(optionName, optionNameEnd)) {
-					Json::Value &optionContainer = *it2;
-					Json::Value &defaultAppConfig = defaultAppConfigContainer[optionName];
-					Json::Value &valueHierarchyDoc = optionContainer["value_hierarchy"];
-					Json::Value &valueHierarchyFromDefault = defaultAppConfig["value_hierarchy"];
+					json::value &optionContainer = *it2;
+					json::value &defaultAppConfig = defaultAppConfigContainer[optionName];
+					json::value &valueHierarchyDoc = optionContainer["value_hierarchy"];
+					json::value &valueHierarchyFromDefault = defaultAppConfig["value_hierarchy"];
 
 					jsonAppendValues(valueHierarchyDoc, valueHierarchyFromDefault);
 					maybeInheritStringArrayHierarchyValues(valueHierarchyDoc);
@@ -363,14 +363,14 @@ private:
 				const char *optionNameEnd;
 				const char *optionName = it2.memberName(&optionNameEnd);
 				if (!optionsContainer.isMember(optionName, optionNameEnd)) {
-					Json::Value &optionContainer = *it2;
+					json::value &optionContainer = *it2;
 					optionsContainer[optionName] = optionContainer;
 				}
 			}
 		}
 	}
 
-	void maybeInheritStringArrayHierarchyValues(Json::Value &valueHierarchyDoc) {
+	void maybeInheritStringArrayHierarchyValues(json::value &valueHierarchyDoc) {
 		if (valueHierarchyDoc.empty()) {
 		    return;
 		}
@@ -380,13 +380,13 @@ private:
 
 		unsigned int len = valueHierarchyDoc.size();
 		for (unsigned int i = len - 1; i >= 1; i--) {
-			Json::Value &current = valueHierarchyDoc[i];
-			Json::Value &next = valueHierarchyDoc[i - 1];
+			json::value &current = valueHierarchyDoc[i];
+			json::value &next = valueHierarchyDoc[i - 1];
 
-			Json::Value &currentValue = current["value"];
-			Json::Value &nextValue = next["value"];
+			json::value &currentValue = current["value"];
+			json::value &nextValue = next["value"];
 
-			Json::Value::iterator it, end = currentValue.end();
+			json::value::iterator it, end = currentValue.end();
 			for (it = currentValue.begin(); it != end; it++) {
 				if (!jsonArrayContains(nextValue, *it)) {
 					nextValue.append(*it);
@@ -395,7 +395,7 @@ private:
 		}
 	}
 
-	void maybeInheritStringKeyvalHierarchyValues(Json::Value &valueHierarchyDoc) {
+	void maybeInheritStringKeyvalHierarchyValues(json::value &valueHierarchyDoc) {
 		if (valueHierarchyDoc.empty()) {
 		    return;
 		}
@@ -405,13 +405,13 @@ private:
 
 		unsigned int len = valueHierarchyDoc.size();
 		for (unsigned int i = len - 1; i >= 1; i--) {
-			Json::Value &current = valueHierarchyDoc[i];
-			Json::Value &next = valueHierarchyDoc[i - 1];
+			json::value &current = valueHierarchyDoc[i];
+			json::value &next = valueHierarchyDoc[i - 1];
 
-			Json::Value &currentValue = current["value"];
-			Json::Value &nextValue = next["value"];
+			json::value &currentValue = current["value"];
+			json::value &nextValue = next["value"];
 
-			Json::Value::iterator it, end = currentValue.end();
+			json::value::iterator it, end = currentValue.end();
 			for (it = currentValue.begin(); it != end; it++) {
 				const char *nameEnd;
 				const char *name = it.memberName(&nameEnd);
@@ -424,17 +424,17 @@ private:
 	}
 
 	void inheritLocationValueHierarchies() {
-		Json::Value &appConfigsContainer = manifest["application_configurations"];
-		Json::Value &defaultLocConfigContainer = manifest["default_location_configuration"];
-		Json::Value::iterator it, end = appConfigsContainer.end();
+		json::value &appConfigsContainer = manifest["application_configurations"];
+		json::value &defaultLocConfigContainer = manifest["default_location_configuration"];
+		json::value::iterator it, end = appConfigsContainer.end();
 
 		/* Iterate through all 'application_configurations' objects */
 		for (it = appConfigsContainer.begin(); it != end; it++) {
-			Json::Value &appConfigContainer = *it;
-			Json::Value::iterator it2, end2;
+			json::value &appConfigContainer = *it;
+			json::value::iterator it2, end2;
 
 			/* Iterate through all its 'default_location_configuration' options */
-			Json::Value &appDefaultLocationConfigs = appConfigContainer[
+			json::value &appDefaultLocationConfigs = appConfigContainer[
 				"default_location_configuration"];
 			end2 = appDefaultLocationConfigs.end();
 			for (it2 = appDefaultLocationConfigs.begin(); it2 != end2; it2++) {
@@ -450,10 +450,10 @@ private:
 				const char *optionName = it2.memberName(&optionNameEnd);
 
 				if (defaultLocConfigContainer.isMember(optionName, optionNameEnd)) {
-					Json::Value &optionContainer = *it2;
-					Json::Value &defaultLocationConfig = defaultLocConfigContainer[optionName];
-					Json::Value &valueHierarchyDoc = optionContainer["value_hierarchy"];
-					Json::Value &valueHierarchyFromDefault = defaultLocationConfig["value_hierarchy"];
+					json::value &optionContainer = *it2;
+					json::value &defaultLocationConfig = defaultLocConfigContainer[optionName];
+					json::value &valueHierarchyDoc = optionContainer["value_hierarchy"];
+					json::value &valueHierarchyFromDefault = defaultLocationConfig["value_hierarchy"];
 
 					jsonAppendValues(valueHierarchyDoc, valueHierarchyFromDefault);
 					maybeInheritStringArrayHierarchyValues(valueHierarchyDoc);
@@ -477,13 +477,13 @@ private:
 
 			/* Iterate through all its 'location_configurations' options */
 			if (appConfigContainer.isMember("location_configurations")) {
-				Json::Value &locationConfigsContainer = appConfigContainer["location_configurations"];
+				json::value &locationConfigsContainer = appConfigContainer["location_configurations"];
 				end2 = locationConfigsContainer.end();
 
 				for (it2 = locationConfigsContainer.begin(); it2 != end2; it2++) {
-					Json::Value &locationContainer = *it2;
-					Json::Value &optionsContainer = locationContainer["options"];
-					Json::Value::iterator it3, end3 = optionsContainer.end();
+					json::value &locationContainer = *it2;
+					json::value &optionsContainer = locationContainer["options"];
+					json::value::iterator it3, end3 = optionsContainer.end();
 
 					for (it3 = optionsContainer.begin(); it3 != end3; it3++) {
 						/* For each option, inherit the value hierarchies
@@ -500,10 +500,10 @@ private:
 						const char *optionName = it3.memberName(&optionNameEnd);
 
 						if (appDefaultLocationConfigs.isMember(optionName, optionNameEnd)) {
-							Json::Value &optionContainer = *it3;
-							Json::Value &defaultLocationConfig = appDefaultLocationConfigs[optionName];
-							Json::Value &valueHierarchyDoc = optionContainer["value_hierarchy"];
-							Json::Value &valueHierarchyFromDefault = defaultLocationConfig["value_hierarchy"];
+							json::value &optionContainer = *it3;
+							json::value &defaultLocationConfig = appDefaultLocationConfigs[optionName];
+							json::value &valueHierarchyDoc = optionContainer["value_hierarchy"];
+							json::value &valueHierarchyFromDefault = defaultLocationConfig["value_hierarchy"];
 
 							jsonAppendValues(valueHierarchyDoc, valueHierarchyFromDefault);
 							maybeInheritStringArrayHierarchyValues(valueHierarchyDoc);
@@ -515,80 +515,80 @@ private:
 		}
 	}
 
-	void addOptionsContainerDynamicDefault(Json::Value &optionsContainer,
+	void addOptionsContainerDynamicDefault(json::value &optionsContainer,
 		const char *optionName, const StaticString &desc)
 	{
-		Json::Value &optionContainer = optionsContainer[optionName];
+		json::value &optionContainer = optionsContainer[optionName];
 		if (optionContainer.isNull()) {
 			initOptionContainer(optionContainer);
 		}
 
-		Json::Value hierarchyMember;
+		json::value hierarchyMember;
 		hierarchyMember["source"]["type"] = "dynamic-default-description";
-		hierarchyMember["value"] = Json::Value(desc.data(),
+		hierarchyMember["value"] = json::value(desc.data(),
 			desc.data() + desc.size());
 
 		optionContainer["value_hierarchy"].append(hierarchyMember);
 	}
 
-	Json::Value &addOptionsContainerDefault(Json::Value &optionsContainer,
+	json::value &addOptionsContainerDefault(json::value &optionsContainer,
 		const char *defaultType, const char *optionName)
 	{
-		Json::Value &optionContainer = optionsContainer[optionName];
+		json::value &optionContainer = optionsContainer[optionName];
 		if (optionContainer.isNull()) {
 			initOptionContainer(optionContainer);
 		}
 
-		Json::Value hierarchyMember;
+		json::value hierarchyMember;
 		hierarchyMember["source"]["type"] = defaultType;
 
 		return optionContainer["value_hierarchy"].append(hierarchyMember);
 	}
 
-	void addOptionsContainerStaticDefaultStr(Json::Value &optionsContainer,
+	void addOptionsContainerStaticDefaultStr(json::value &optionsContainer,
 		const char *optionName, const StaticString &value)
 	{
-		Json::Value &hierarchyMember = addOptionsContainerDefault(
+		json::value &hierarchyMember = addOptionsContainerDefault(
 			optionsContainer, "default", optionName);
-		hierarchyMember["value"] = Json::Value(value.data(),
+		hierarchyMember["value"] = json::value(value.data(),
 			value.data() + value.size());
 	}
 
-	void addOptionsContainerStaticDefaultInt(Json::Value &optionsContainer,
+	void addOptionsContainerStaticDefaultInt(json::value &optionsContainer,
 		const char *optionName, int value)
 	{
-		Json::Value &hierarchyMember = addOptionsContainerDefault(
+		json::value &hierarchyMember = addOptionsContainerDefault(
 			optionsContainer, "default", optionName);
 		hierarchyMember["value"] = value;
 	}
 
-	void addOptionsContainerStaticDefaultBool(Json::Value &optionsContainer,
+	void addOptionsContainerStaticDefaultBool(json::value &optionsContainer,
 		const char *optionName, bool value)
 	{
-		Json::Value &hierarchyMember = addOptionsContainerDefault(
+		json::value &hierarchyMember = addOptionsContainerDefault(
 			optionsContainer, "default", optionName);
 		hierarchyMember["value"] = value;
 	}
 
-	void addOptionsContainerInferredDefaultStr(Json::Value &optionsContainer,
+	void addOptionsContainerInferredDefaultStr(json::value &optionsContainer,
 		const char *optionName, const StaticString &value)
 	{
-		Json::Value &hierarchyMember = addOptionsContainerDefault(
+		json::value &hierarchyMember = addOptionsContainerDefault(
 			optionsContainer, "inferred-default", optionName);
-		hierarchyMember["value"] = Json::Value(value.data(),
+		hierarchyMember["value"] = json::value(value.data(),
 			value.data() + value.size());
 	}
 
-	void jsonAppendValues(Json::Value &doc, const Json::Value &doc2) {
-		Json::Value::const_iterator it, end = doc2.end();
+	void jsonAppendValues(json::value &doc, const json::value &doc2) {
+		json::value::const_iterator it, end = doc2.end();
 
 		for (it = doc2.begin(); it != end; it++) {
 			doc.append(*it);
 		}
 	}
 
-	bool jsonArrayContains(const Json::Value &doc, const Json::Value &elem) {
-		Json::Value::const_iterator it, end = doc.end();
+	bool jsonArrayContains(const json::value &doc, const json::value &elem) {
+		json::value::const_iterator it, end = doc.end();
 		for (it = doc.begin(); it != end; it++) {
 			if (*it == elem) {
 				return true;
@@ -603,13 +603,13 @@ public:
 		: serverRec(_serverRec),
 		  pool(_pool)
 	{
-		manifest["global_configuration"] = Json::objectValue;
-		manifest["default_application_configuration"] = Json::objectValue;
-		manifest["default_location_configuration"] = Json::objectValue;
-		manifest["application_configurations"] = Json::objectValue;
+		manifest["global_configuration"] = json::object;
+		manifest["default_application_configuration"] = json::object;
+		manifest["default_location_configuration"] = json::object;
+		manifest["application_configurations"] = json::object;
 	}
 
-	const Json::Value &execute() {
+	const json::value &execute() {
 		autoGenerated_generateConfigManifestForServerConfig();
 		traverseAllDirConfigs(serverRec, pool,
 			boost::bind<void>(&ConfigManifestGenerator::processDirConfig, this,

@@ -28,7 +28,7 @@
 
 #include <queue>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <oxt/macros.hpp>
 #include <oxt/thread.hpp>
 #include <boost/circular_buffer.hpp>
@@ -100,7 +100,7 @@ private:
 	LogStore logStore;
 
 public:
-	Context(const Json::Value &initialConfig = Json::Value(),
+	Context(const json::value &initialConfig = json::value(),
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator());
 	~Context();
 	ConfigKit::Store getConfig() const;
@@ -111,14 +111,14 @@ public:
 		const char *sourceStr, unsigned int sourceStrLen,
 		const char *content, unsigned int contentLen);
 	// snapshot logStore to a JSON structure for external relay
-	Json::Value convertLog();
+	json::value convertLog();
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors,
 		LoggingKit::ConfigChangeRequest &req);
 	void commitConfigChange(LoggingKit::ConfigChangeRequest &req)
 		BOOST_NOEXCEPT_OR_NOTHROW;
-	Json::Value inspectConfig() const;
+	json::value inspectConfig() const;
 
 	OXT_FORCE_INLINE
 	const ConfigRealization *getConfigRealization() const {
@@ -138,7 +138,7 @@ private:
 };
 
 
-void initialize(const Json::Value &initialConfig = Json::Value(),
+void initialize(const json::value &initialConfig = json::value(),
 	const ConfigKit::Translator &translator = ConfigKit::DummyTranslator());
 
 

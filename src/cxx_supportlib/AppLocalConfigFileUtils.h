@@ -32,12 +32,13 @@
 #include <cerrno>
 #include <fcntl.h>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <StaticString.h>
 #include <Constants.h>
 #include <Exceptions.h>
 #include <IOTools/IOUtils.h>
+#include <JsonTools/JsonUtils.h>
 #include <Utils/ScopeGuard.h>
 
 namespace Passenger {
@@ -100,15 +101,16 @@ parseAppLocalConfigFile(const StaticString appRoot) {
 	fdGuard.runNow();
 
 	UPDATE_TRACE_POINT();
-	Json::Reader reader;
-	Json::Value config;
-	if (!reader.parse(content.first, config)) {
+
+	error_code ec;
+	json::value vconfig = json::parse(content.first, ec);
+	if (ec) {
 		if (geteuid() == 0) {
 			throw RuntimeException("Error parsing " + path
 				+ " (error messages suppressed for security reasons)");
 		} else {
 			throw RuntimeException("Error parsing " + path + ": "
-				+ reader.getFormattedErrorMessages());
+				+ ec.message());
 		}
 	}
 	// We no longer need the raw data so free the memory.
@@ -118,21 +120,22 @@ parseAppLocalConfigFile(const StaticString appRoot) {
 	UPDATE_TRACE_POINT();
 	AppLocalConfig result;
 
-	if (!config.isObject()) {
+	if (!vconfig.is_object()) {
 		throw RuntimeException("Config file " + path
 			+ " is not valid: top-level JSON object expected");
 	}
-	if (config.isMember("app_start_command")) {
-		if (config["app_start_command"].isString()) {
-			result.appStartCommand = config["app_start_command"].asString();
+	json::object config = vconfig.get_object();
+	if (config.contains("app_start_command")) {
+		if (config["app_start_command"].is_string()) {
+			result.appStartCommand = getJsonStringField(config,"app_start_command");
 		} else {
 			throw RuntimeException("Config file " + path
 				+ " is not valid: key 'app_start_command' must be a boolean");
 		}
 	}
-	if (config.isMember("app_supports_kuria_protocol")) {
-		if (config["app_supports_kuria_protocol"].isBool()) {
-			result.appSupportsKuriaProtocol = config["app_supports_kuria_protocol"].asBool();
+	if (config.contains("app_supports_kuria_protocol")) {
+		if (config["app_supports_kuria_protocol"].is_bool()) {
+			result.appSupportsKuriaProtocol = config["app_supports_kuria_protocol"].as_bool();
 		} else {
 			throw RuntimeException("Config file " + path
 				+ " is not valid: key 'app_supports_kuria_protocol' must be a boolean");

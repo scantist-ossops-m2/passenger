@@ -58,7 +58,7 @@ struct Context {
 };
 
 typedef void (*OptionParserFunc)(int argc, const char **argv, ConfigKit::Store &config);
-typedef void (*LoggingKitPreInitFunc)(Json::Value &config);
+typedef void (*LoggingKitPreInitFunc)(json::value &config);
 
 extern Context *context;
 

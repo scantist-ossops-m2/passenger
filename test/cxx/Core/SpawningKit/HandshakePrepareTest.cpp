@@ -45,7 +45,7 @@ namespace tut {
 			session->journey.setStepInProgress(SPAWNING_KIT_PREPARATION);
 		}
 
-		void initAndExec(JourneyType type, const Json::Value &extraArgs = Json::Value()) {
+		void initAndExec(JourneyType type, const json::value &extraArgs = json::value()) {
 			init(type);
 			HandshakePrepare(*session, extraArgs).execute().finalize();
 		}
@@ -130,7 +130,7 @@ namespace tut {
 		config.genericApp = true;
 		initAndExec(SPAWN_DIRECTLY);
 
-		Json::Value doc = context.inspectConfig();
+		json::value doc = context.inspectConfig();
 		ensure("Port found", session->expectedStartPort > 0);
 		ensure("Port is within range (1)",
 			session->expectedStartPort >= doc["min_port_range"]["effective_value"].asUInt());
@@ -147,7 +147,7 @@ namespace tut {
 		config.findFreePort = true;
 		initAndExec(SPAWN_DIRECTLY);
 
-		Json::Value doc = context.inspectConfig();
+		json::value doc = context.inspectConfig();
 		ensure("Port found", session->expectedStartPort > 0);
 		ensure("Port is within range (1)",
 			session->expectedStartPort >= doc["min_port_range"]["effective_value"].asUInt());

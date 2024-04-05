@@ -30,7 +30,7 @@
 #include <vector>
 #include <stdexcept>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <ConfigKit/Common.h>
 #include <ConfigKit/Translator.h>
 
@@ -43,11 +43,11 @@ using namespace std;
 template<typename Component>
 inline void
 prepareConfigChangeForSubComponent(Component &component, const Translator &translator,
-	const Json::Value &updates, vector<ConfigKit::Error> &errors,
+	const json::value &updates, vector<ConfigKit::Error> &errors,
 	typename Component::ConfigChangeRequest &req)
 {
 	vector<Error> tempErrors;
-	component.prepareConfigChange(translator.translate(updates),
+	component.prepareConfigChange(translator.translate(updates.get_object()),
 		tempErrors, req);
 	tempErrors = translator.reverseTranslate(tempErrors);
 	errors.insert(errors.end(), tempErrors.begin(), tempErrors.end());

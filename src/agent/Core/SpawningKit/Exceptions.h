@@ -993,8 +993,8 @@ public:
 		annotations.insert(name, value, overwrite);
 	}
 
-	Json::Value inspectBasicInfoAsJson() const {
-		Json::Value doc;
+	json::value inspectBasicInfoAsJson() const {
+		json::object doc;
 
 		doc["category"] = errorCategoryToString(category).toString();
 		doc["summary"] = summary;
@@ -1010,19 +1010,19 @@ public:
 		return doc;
 	}
 
-	Json::Value inspectSystemWideDetailsAsJson() const {
-		Json::Value doc;
+	json::value inspectSystemWideDetailsAsJson() const {
+		json::object doc;
 
 		doc["system_metrics"] = systemMetrics;
 
 		return doc;
 	}
 
-	Json::Value inspectParentProcessDetailsAsJson() const {
-		Json::Value doc;
+	json::value inspectParentProcessDetailsAsJson() const {
+		json::object doc;
 
 		doc["backtrace"] = backtrace();
-		doc["pid"] = (Json::Int) parentProcessEnvDump.pid;
+		doc["pid"] = (int64_t) parentProcessEnvDump.pid;
 		doc["envvars"] = getParentProcessEnvvars();
 		doc["user_info"] = getParentProcessUserInfo();
 		doc["ulimits"] = getParentProcessUlimits();
@@ -1030,8 +1030,8 @@ public:
 		return doc;
 	}
 
-	Json::Value inspectPreloaderProcessDetailsAsJson() const {
-		Json::Value doc, annotations(Json::objectValue);
+	json::value inspectPreloaderProcessDetailsAsJson() const {
+		json::object doc, annotations;
 
 		if (getPreloaderPid() != (pid_t) -1) {
 			doc["pid"] = getPreloaderPid();
@@ -1050,8 +1050,8 @@ public:
 		return doc;
 	}
 
-	Json::Value inspectSubprocessDetailsAsJson() const {
-		Json::Value doc, annotations(Json::objectValue);
+	json::value inspectSubprocessDetailsAsJson() const {
+		json::object doc, annotations;
 
 		if (getSubprocessPid() != (pid_t) -1) {
 			doc["pid"] = getSubprocessPid();

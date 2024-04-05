@@ -121,7 +121,7 @@ private:
 		startBackgroundThread(detachProcessMain, (void *) (long) pid);
 	}
 
-	void setConfigFromAppPoolOptions(Config *config, Json::Value &extraArgs,
+	void setConfigFromAppPoolOptions(Config *config, json::value &extraArgs,
 		const AppPoolOptions &options)
 	{
 		Spawner::setConfigFromAppPoolOptions(config, extraArgs, options);
@@ -129,7 +129,7 @@ private:
 	}
 
 	Result internalSpawn(const AppPoolOptions &options, Config &config,
-		HandshakeSession &session, const Json::Value &extraArgs,
+		HandshakeSession &session, const json::value &extraArgs,
 		JourneyStep &stepToMarkAsErrored)
 	{
 		TRACE_POINT();
@@ -241,7 +241,7 @@ public:
 
 		UPDATE_TRACE_POINT();
 		Config config;
-		Json::Value extraArgs;
+		json::value extraArgs;
 		try {
 			setConfigFromAppPoolOptions(&config, extraArgs, options);
 		} catch (const std::exception &originalException) {
@@ -255,7 +255,7 @@ public:
 		UPDATE_TRACE_POINT();
 		HandshakeSession session(*context, config, SPAWN_DIRECTLY);
 		session.journey.setStepInProgress(SPAWNING_KIT_PREPARATION);
-		HandshakePrepare(session, extraArgs).execute();
+		HandshakePrepare(session, extraArgs.get_object()).execute();
 		JourneyStep stepToMarkAsErrored = SPAWNING_KIT_PREPARATION;
 
 		UPDATE_TRACE_POINT();

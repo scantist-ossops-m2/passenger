@@ -181,9 +181,9 @@ def main
   end
 
 
-  function 'inline Json::Value Passenger::SpawningKit::Config::getConfidentialFieldsToPassToApp() const' do
+  function 'inline json::value Passenger::SpawningKit::Config::getConfidentialFieldsToPassToApp() const' do
     add_code %q{
-      Json::Value doc;
+      json::object doc;
       const Config &config = *this;
     }
 
@@ -225,9 +225,9 @@ def main
     }
   end
 
-  function 'inline Json::Value Passenger::SpawningKit::Config::getNonConfidentialFieldsToPassToApp() const' do
+  function 'inline json::value Passenger::SpawningKit::Config::getNonConfidentialFieldsToPassToApp() const' do
     add_code %q{
-      Json::Value doc;
+      json::object doc;
       const Config &config = *this;
     }
 

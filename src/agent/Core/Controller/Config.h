@@ -39,6 +39,7 @@
 #include <MemoryKit/palloc.h>
 #include <ServerKit/HttpServer.h>
 #include <SystemTools/UserDatabase.h>
+#include <JsonTools/JsonUtils.h>
 #include <WrapperRegistry/Registry.h>
 #include <Constants.h>
 #include <Exceptions.h>
@@ -185,14 +186,14 @@ private:
 		addValidator(ConfigKit::validateIntegrationMode);
 	}
 
-	static Json::Value inferDefaultValueForDefaultGroup(const ConfigKit::Store &config) {
+	static json::string inferDefaultValueForDefaultGroup(const ConfigKit::Store &config) {
 		OsUser osUser;
-		if (!lookupSystemUserByName(config["default_user"].asString(), osUser)) {
+		if (!lookupSystemUserByName(jsonValueToString(config["default_user"]), osUser)) {
 			throw ConfigurationException(
 				"The user that PassengerDefaultUser refers to, '" +
-				config["default_user"].asString() + "', does not exist.");
+				jsonValueToString(config["default_user"]) + "', does not exist.");
 		}
-		return lookupSystemGroupnameByGid(osUser.pwd.pw_gid, true);
+		return json::string(lookupSystemGroupnameByGid(osUser.pwd.pw_gid, true));
 	}
 
 	static void validate(const ConfigKit::Store &config,
@@ -201,7 +202,7 @@ private:
 		using namespace ConfigKit;
 
 		ControllerBenchmarkMode mode = parseControllerBenchmarkMode(
-			config["benchmark_mode"].asString());
+			jsonValueToString(config["benchmark_mode"]));
 		if (mode == BM_UNKNOWN) {
 			errors.push_back(Error("'{{benchmark_mode}}' is not set to a valid value"));
 		}
@@ -255,7 +256,7 @@ struct ControllerSingleAppModeSchema: public ConfigKit::Schema {
 		finalize();
 	}
 
-	static Json::Value getDefaultAppRoot(const ConfigKit::Store &config) {
+	static json::string getDefaultAppRoot(const ConfigKit::Store &config) {
 		char buf[MAXPATHLEN];
 		const char *path = getcwd(buf, sizeof(buf));
 		if (path == NULL) {
@@ -263,7 +264,7 @@ struct ControllerSingleAppModeSchema: public ConfigKit::Schema {
 			throw SystemException("Unable to obtain current working directory", e);
 		}
 		string result = path;
-		return result;
+		return json::string(result);
 	}
 
 	static void validateAppTypeOrAppStartCommandSet(const ConfigKit::Store &config,
@@ -271,11 +272,11 @@ struct ControllerSingleAppModeSchema: public ConfigKit::Schema {
 	{
 		typedef ConfigKit::Error Error;
 
-		if (config["app_type"].isNull() && config["app_start_command"].isNull()) {
+		if (config["app_type"].is_null() && config["app_start_command"].is_null()) {
 			errors.push_back(Error(
 				"Either '{{app_type}}' or '{{app_start_command}}' must be set"));
 		}
-		if (!config["app_type"].isNull() && config["startup_file"].isNull()) {
+		if (!config["app_type"].is_null() && config["startup_file"].is_null()) {
 			errors.push_back(Error(
 				"If '{{app_type}}' is set, then '{{startup_file}}' must also be set"));
 		}
@@ -287,12 +288,12 @@ struct ControllerSingleAppModeSchema: public ConfigKit::Schema {
 	{
 		typedef ConfigKit::Error Error;
 
-		if (!config[appTypeKey].isNull() && wrapperRegistry != NULL) {
+		if (!config[appTypeKey].is_null() && wrapperRegistry != NULL) {
 			const WrapperRegistry::Entry &entry =
-				wrapperRegistry->lookup(config[appTypeKey].asString());
+				wrapperRegistry->lookup(jsonValueToString(config[appTypeKey]));
 			if (entry.isNull()) {
 				string message = "'{{" + appTypeKey + "}}' is set to '"
-					+ config[appTypeKey].asString() + "', which is not a"
+					+ jsonValueToString(config[appTypeKey]) + "', which is not a"
 					" valid application type. Supported app types are:";
 				WrapperRegistry::Registry::ConstIterator it(
 					wrapperRegistry->getIterator());
@@ -306,17 +307,17 @@ struct ControllerSingleAppModeSchema: public ConfigKit::Schema {
 		}
 	}
 
-	static Json::Value normalizeAppRoot(const Json::Value &effectiveValues) {
-		Json::Value updates;
-		updates["app_root"] = absolutizePath(effectiveValues["app_root"].asString());
+	static json::object normalizeAppRoot(const json::object &effectiveValues) {
+		json::object updates;
+		updates["app_root"] = absolutizePath(getJsonStaticStringField(effectiveValues,"app_root"));
 		return updates;
 	}
 
-	static Json::Value normalizeStartupFile(const Json::Value &effectiveValues) {
-		Json::Value updates;
-		if (effectiveValues.isMember("startup_file")) {
+	static json::object normalizeStartupFile(const json::object &effectiveValues) {
+		json::object updates;
+		if (effectiveValues.contains("startup_file")) {
 			updates["startup_file"] = absolutizePath(
-				effectiveValues["startup_file"].asString());
+			   getJsonStaticStringField(effectiveValues,"startup_file"));
 		}
 		return updates;
 	}
@@ -354,17 +355,17 @@ public:
 	ControllerMainConfig(const ConfigKit::Store &config)
 		: pool(psg_create_pool(1024)),
 
-		  threadNumber(config["thread_number"].asUInt()),
-		  statThrottleRate(config["stat_throttle_rate"].asUInt()),
-		  responseBufferHighWatermark(config["response_buffer_high_watermark"].asUInt()),
-		  integrationMode(psg_pstrdup(pool, config["integration_mode"].asString())),
+		  threadNumber(config["thread_number"].as_uint64()),
+		  statThrottleRate(config["stat_throttle_rate"].as_uint64()),
+		  responseBufferHighWatermark(config["response_buffer_high_watermark"].as_uint64()),
+		  integrationMode(psg_pstrdup(pool, jsonValueToString(config["integration_mode"]))),
 		  serverLogName(createServerLogName()),
-		  maxInstancesPerApp(config["max_instances_per_app"].asUInt()),
-		  benchmarkMode(parseControllerBenchmarkMode(config["benchmark_mode"].asString())),
-		  singleAppMode(!config["multi_app"].asBool()),
-		  userSwitching(config["user_switching"].asBool()),
-		  defaultStickySessions(config["default_sticky_sessions"].asBool()),
-		  gracefulExit(config["graceful_exit"].asBool())
+		  maxInstancesPerApp(config["max_instances_per_app"].as_uint64()),
+		  benchmarkMode(parseControllerBenchmarkMode(jsonValueToString(config["benchmark_mode"]))),
+		  singleAppMode(!config["multi_app"].as_bool()),
+		  userSwitching(config["user_switching"].as_bool()),
+		  defaultStickySessions(config["default_sticky_sessions"].as_bool()),
+		  gracefulExit(config["graceful_exit"].as_bool())
 
 		  /*******************/
 	{
@@ -451,33 +452,33 @@ public:
 	ControllerRequestConfig(const ConfigKit::Store &config)
 		: pool(psg_create_pool(1024 * 4)),
 
-		  defaultRuby(psg_pstrdup(pool, config["default_ruby"].asString())),
-		  defaultPython(psg_pstrdup(pool, config["default_python"].asString())),
-		  defaultNodejs(psg_pstrdup(pool, config["default_nodejs"].asString())),
-		  defaultUser(psg_pstrdup(pool, config["default_user"].asString())),
-		  defaultGroup(psg_pstrdup(pool, config["default_group"].asString())),
-		  defaultServerName(psg_pstrdup(pool, config["default_server_name"].asString())),
-		  defaultServerPort(psg_pstrdup(pool, config["default_server_port"].asString())),
-		  serverSoftware(psg_pstrdup(pool, config["server_software"].asString())),
-		  defaultStickySessionsCookieName(psg_pstrdup(pool, config["default_sticky_sessions_cookie_name"].asString())),
-		  defaultStickySessionsCookieAttributes(psg_pstrdup(pool, config["default_sticky_sessions_cookie_attributes"].asString())),
-		  defaultVaryTurbocacheByCookie(psg_pstrdup(pool, config["vary_turbocache_by_cookie"].asString())),
+		  defaultRuby(psg_pstrdup(pool, jsonValueToString(config["default_ruby"]))),
+		  defaultPython(psg_pstrdup(pool, jsonValueToString(config["default_python"]))),
+		  defaultNodejs(psg_pstrdup(pool, jsonValueToString(config["default_nodejs"]))),
+		  defaultUser(psg_pstrdup(pool, jsonValueToString(config["default_user"]))),
+		  defaultGroup(psg_pstrdup(pool, jsonValueToString(config["default_group"]))),
+		  defaultServerName(psg_pstrdup(pool, jsonValueToString(config["default_server_name"]))),
+		  defaultServerPort(psg_pstrdup(pool, jsonValueToString(config["default_server_port"]))),
+		  serverSoftware(psg_pstrdup(pool, jsonValueToString(config["server_software"]))),
+		  defaultStickySessionsCookieName(psg_pstrdup(pool, jsonValueToString(config["default_sticky_sessions_cookie_name"]))),
+		  defaultStickySessionsCookieAttributes(psg_pstrdup(pool, jsonValueToString(config["default_sticky_sessions_cookie_attributes"]))),
+		  defaultVaryTurbocacheByCookie(psg_pstrdup(pool, jsonValueToString(config["vary_turbocache_by_cookie"]))),
 
-		  defaultFriendlyErrorPages(psg_pstrdup(pool, config["default_friendly_error_pages"].asString())),
-		  defaultEnvironment(psg_pstrdup(pool, config["default_environment"].asString())),
-		  defaultSpawnMethod(psg_pstrdup(pool, config["default_spawn_method"].asString())),
-		  defaultBindAddress(psg_pstrdup(pool, config["default_bind_address"].asString())),
-		  defaultMeteorAppSettings(psg_pstrdup(pool, config["default_meteor_app_settings"].asString())),
-		  defaultAppFileDescriptorUlimit(config["default_app_file_descriptor_ulimit"].asUInt()),
-		  defaultMinInstances(config["default_min_instances"].asUInt()),
-		  defaultMaxPreloaderIdleTime(config["default_max_preloader_idle_time"].asUInt()),
-		  defaultMaxRequestQueueSize(config["default_max_request_queue_size"].asUInt()),
-		  defaultMaxRequests(config["default_max_requests"].asUInt()),
-		  defaultForceMaxConcurrentRequestsPerProcess(config["default_force_max_concurrent_requests_per_process"].asInt()),
-		  showVersionInHeader(config["show_version_in_header"].asBool()),
-		  defaultAbortWebsocketsOnProcessShutdown(config["default_abort_websockets_on_process_shutdown"].asBool()),
-		  defaultLoadShellEnvvars(config["default_load_shell_envvars"].asBool()),
-		  defaultPreloadBundler(config["default_preload_bundler"].asBool())
+		  defaultFriendlyErrorPages(psg_pstrdup(pool, jsonValueToString(config["default_friendly_error_pages"]))),
+		  defaultEnvironment(psg_pstrdup(pool, jsonValueToString(config["default_environment"]))),
+		  defaultSpawnMethod(psg_pstrdup(pool, jsonValueToString(config["default_spawn_method"]))),
+		  defaultBindAddress(psg_pstrdup(pool, jsonValueToString(config["default_bind_address"]))),
+		  defaultMeteorAppSettings(psg_pstrdup(pool, jsonValueToString(config["default_meteor_app_settings"]))),
+		  defaultAppFileDescriptorUlimit(config["default_app_file_descriptor_ulimit"].as_uint64()),
+		  defaultMinInstances(config["default_min_instances"].as_uint64()),
+		  defaultMaxPreloaderIdleTime(config["default_max_preloader_idle_time"].as_uint64()),
+		  defaultMaxRequestQueueSize(config["default_max_request_queue_size"].as_uint64()),
+		  defaultMaxRequests(config["default_max_requests"].as_uint64()),
+		  defaultForceMaxConcurrentRequestsPerProcess(config["default_force_max_concurrent_requests_per_process"].as_int64()),
+		  showVersionInHeader(config["show_version_in_header"].as_bool()),
+		  defaultAbortWebsocketsOnProcessShutdown(config["default_abort_websockets_on_process_shutdown"].as_bool()),
+		  defaultLoadShellEnvvars(config["default_load_shell_envvars"].as_bool()),
+		  defaultPreloadBundler(config["default_preload_bundler"].as_bool())
 
 		  /*******************/
 		{ }

@@ -34,7 +34,7 @@ namespace tut {
 		string lastSuccess;
 		string lastSuccessAdditional;
 
-		TestChecker(const SecurityUpdateChecker::Schema &schema, const Json::Value &initialConfig)
+		TestChecker(const SecurityUpdateChecker::Schema &schema, const json::value &initialConfig)
 			: SecurityUpdateChecker(schema, initialConfig),
 			  mockResponseCurlCode(CURLE_FAILED_INIT),
 			  mockResponseHttpCode(0)
@@ -98,7 +98,7 @@ namespace tut {
 		}
 
 		void init() {
-			Json::Value config;
+			json::value config;
 			config["server_identifier"] = "testing";
 			checker = boost::make_shared<TestChecker>(schema, config);
 			checker->resourceLocator = resourceLocator;

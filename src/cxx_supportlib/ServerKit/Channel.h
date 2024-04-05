@@ -32,7 +32,7 @@
 #include <boost/move/core.hpp>
 #include <algorithm>
 #include <cassert>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <ServerKit/Context.h>
 #include <ServerKit/Hooks.h>
 #include <MemoryKit/mbuf.h>
@@ -872,8 +872,8 @@ public:
 		return state == EOF_OR_ERROR_ACKNOWLEDGED;
 	}
 
-	Json::Value inspectAsJson() const {
-		Json::Value doc;
+	json::value inspectAsJson() const {
+		json::object doc;
 
 		doc["callback_in_progress"] = !acceptingInput();
 		if (hasError()) {

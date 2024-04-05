@@ -15,7 +15,7 @@ namespace tut {
 	TEST_METHOD(1) {
 		set_test_name("Test TableTranslator document translation");
 		ConfigKit::TableTranslator translator;
-		Json::Value doc;
+		json::value doc;
 
 		doc["foo"] = 123;
 		doc["bar"] = 456;
@@ -89,7 +89,7 @@ namespace tut {
 	TEST_METHOD(5) {
 		set_test_name("Test PrefixTranslator document translation");
 		ConfigKit::PrefixTranslator translator("main_");
-		Json::Value doc;
+		json::value doc;
 
 		doc["main_foo"] = 123;
 		doc["main_bar"] = 456;

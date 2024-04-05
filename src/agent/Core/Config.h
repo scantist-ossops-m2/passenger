@@ -51,6 +51,7 @@
 #include <Constants.h>
 #include <Utils.h>
 #include <IOTools/IOUtils.h>
+#include <JsonTools/JsonUtils.h>
 
 namespace Passenger {
 namespace Core {
@@ -201,32 +202,32 @@ private:
 	static void addSubSchemaPrefixTranslations(ConfigKit::TableTranslator &translator,
 		const StaticString &prefix)
 	{
-		vector<string> keys = SchemaType().inspect().getMemberNames();
-		vector<string>::const_iterator it, end = keys.end();
-		for (it = keys.begin(); it != end; it++) {
-			translator.add(prefix + *it, *it);
+		json::object schema = SchemaType().inspect();
+		json::object::const_iterator it, end = schema.end();
+		for (it = schema.begin(); it != end; it++) {
+			translator.add(prefix + string(it->key()), it->key());
 		}
 	}
 
-	static Json::Value getDefaultServerName(const ConfigKit::Store &store) {
-		Json::Value addresses = store["controller_addresses"];
+	static json::value getDefaultServerName(const ConfigKit::Store &store) {
+		json::array &&addresses = store["controller_addresses"].get_array();
 		if (addresses.size() > 0) {
-			string firstAddress = addresses[0].asString();
+			json::string firstAddress = addresses[0].as_string();
 			if (getSocketAddressType(firstAddress) == SAT_TCP) {
 				string host;
 				unsigned short port;
 
 				parseTcpSocketAddress(firstAddress, host, port);
-				return host;
+				return json::string(host);
 			}
 		}
 		return "localhost";
 	}
 
-	static Json::Value getDefaultServerPort(const ConfigKit::Store &store) {
-		Json::Value addresses = store["controller_addresses"];
+	static json::value getDefaultServerPort(const ConfigKit::Store &store) {
+		json::array &&addresses = store["controller_addresses"].get_array();
 		if (addresses.size() > 0) {
-			string firstAddress = addresses[0].asString();
+			json::string firstAddress = addresses[0].as_string();
 			if (getSocketAddressType(firstAddress) == SAT_TCP) {
 				string host;
 				unsigned short port;
@@ -238,32 +239,30 @@ private:
 		return 80;
 	}
 
-	static Json::Value getDefaultThreads(const ConfigKit::Store &store) {
-		return Json::UInt(boost::thread::hardware_concurrency());
+	static json::value getDefaultThreads(const ConfigKit::Store &store) {
+		return uint64_t(boost::thread::hardware_concurrency());
 	}
 
-	static Json::Value getDefaultControllerAddresses() {
-		Json::Value doc;
-		doc.append(DEFAULT_HTTP_SERVER_LISTEN_ADDRESS);
-		return doc;
+	static json::value getDefaultControllerAddresses() {
+		return json::array({DEFAULT_HTTP_SERVER_LISTEN_ADDRESS});
 	}
 
 	static void validateMultiAppMode(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
 		typedef ConfigKit::Error Error;
 
-		if (!config["multi_app"].asBool()) {
+		if (!config["multi_app"].as_bool()) {
 			return;
 		}
 
-		if (!config["single_app_mode_app_type"].isNull()) {
+		if (!config["single_app_mode_app_type"].is_null()) {
 			errors.push_back(Error("If '{{multi_app_mode}}' is set,"
 				" then '{{single_app_mode_app_type}}' may not be set"));
 		}
-		if (!config["single_app_mode_startup_file"].isNull()) {
+		if (!config["single_app_mode_startup_file"].is_null()) {
 			errors.push_back(Error("If '{{multi_app_mode}}' is set,"
 				" then '{{single_app_mode_startup_file}}' may not be set"));
 		}
-		if (!config["single_app_mode_app_start_command"].isNull()) {
+		if (!config["single_app_mode_app_start_command"].is_null()) {
 			errors.push_back(Error("If '{{multi_app_mode}}' is set,"
 				" then '{{single_app_mode_app_start_command}}' may not be set"));
 		}
@@ -272,7 +271,7 @@ private:
 	static void validateSingleAppMode(const ConfigKit::Store &config,
 		const WrapperRegistry::Registry *wrapperRegistry, vector<ConfigKit::Error> &errors)
 	{
-		if (config["multi_app"].asBool()) {
+		if (config["multi_app"].as_bool()) {
 			return;
 		}
 
@@ -287,20 +286,20 @@ private:
 	static void validateControllerSecureHeadersPassword(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
 		typedef ConfigKit::Error Error;
 
-		Json::Value password = config["controller_secure_headers_password"];
-		if (password.isNull()) {
+		json::value password = config["controller_secure_headers_password"];
+		if (password.is_null()) {
 			return;
 		}
 
-		if (!password.isString() && !password.isObject()) {
+		if (!password.is_string() && !password.is_object()) {
 			errors.push_back(Error("'{{controller_secure_headers_password}}' must be a string or an object"));
 			return;
 		}
 
-		if (password.isObject()) {
-			if (!password.isMember("path")) {
+		if (password.is_object()) {
+			if (!password.get_object().contains("path")) {
 				errors.push_back(Error("If '{{controller_secure_headers_password}}' is an object, then it must contain a 'path' option"));
-			} else if (!password["path"].isString()) {
+			} else if (!getJsonField(password,"path").is_string()) {
 				errors.push_back(Error("If '{{controller_secure_headers_password}}' is an object, then its 'path' option must be a string"));
 			}
 		}
@@ -309,7 +308,7 @@ private:
 	static void validateApplicationPool(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
 		typedef ConfigKit::Error Error;
 
-		if (config["max_pool_size"].asUInt() < 1) {
+		if (config["max_pool_size"].as_uint64() < 1) {
 			errors.push_back(Error("'{{max_pool_size}}' must be at least 1"));
 		}
 	}
@@ -317,7 +316,7 @@ private:
 	static void validateController(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
 		typedef ConfigKit::Error Error;
 
-		if (config["controller_threads"].asUInt() < 1) {
+		if (config["controller_threads"].as_uint64() < 1) {
 			errors.push_back(Error("'{{controller_threads}}' must be at least 1"));
 		}
 	}
@@ -325,14 +324,15 @@ private:
 	static void validateAddresses(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
 		typedef ConfigKit::Error Error;
 
-		if (config["controller_addresses"].empty()) {
+		json::array &&ca = config["controller_addresses"].get_array();
+		if (ca.empty()) {
 			errors.push_back(Error("'{{controller_addresses}}' must contain at least 1 item"));
-		} else if (config["controller_addresses"].size() > SERVER_KIT_MAX_SERVER_ENDPOINTS) {
+		} else if (ca.size() > SERVER_KIT_MAX_SERVER_ENDPOINTS) {
 			errors.push_back(Error("'{{controller_addresses}}' may contain at most "
 				+ toString(SERVER_KIT_MAX_SERVER_ENDPOINTS) + " items"));
 		}
-
-		if (config["api_server_addresses"].size() > SERVER_KIT_MAX_SERVER_ENDPOINTS) {
+		json::array &&asa = config["api_server_addresses"].get_array();
+		if (asa.size() > SERVER_KIT_MAX_SERVER_ENDPOINTS) {
 			errors.push_back(Error("'{{api_server_addresses}}' may contain at most "
 				+ toString(SERVER_KIT_MAX_SERVER_ENDPOINTS) + " items"));
 		}
@@ -341,30 +341,30 @@ private:
 	/*****************/
 	/*****************/
 
-	static Json::Value normalizeSingleAppMode(const Json::Value &effectiveValues) {
-		if (effectiveValues["multi_app"].asBool()) {
-			return Json::Value();
+	static json::object normalizeSingleAppMode(const json::object &effectiveValues) {
+		if (getJsonBoolField(effectiveValues, "multi_app")) {
+			return json::object();
 		}
 
-		Json::Value updates;
+		json::object updates;
 		updates["single_app_mode_app_root"] = absolutizePath(
-			effectiveValues["single_app_mode_app_root"].asString());
-		if (!effectiveValues["single_app_mode_startup_file"].isNull()) {
+			getJsonStaticStringField(effectiveValues,"single_app_mode_app_root"));
+		if (!effectiveValues.at("single_app_mode_startup_file").is_null()) {
 			updates["single_app_mode_startup_file"] = absolutizePath(
-				effectiveValues["single_app_mode_startup_file"].asString());
+				getJsonStaticStringField(effectiveValues,"single_app_mode_startup_file"));
 		}
 		return updates;
 	}
 
-	static Json::Value normalizeServerSoftware(const Json::Value &effectiveValues) {
-		string serverSoftware = effectiveValues["server_software"].asString();
+	static json::object normalizeServerSoftware(const json::object &effectiveValues) {
+		json::string serverSoftware = effectiveValues.at("server_software").as_string();
 		if (serverSoftware.find(SERVER_TOKEN_NAME) == string::npos
 		 && serverSoftware.find(FLYING_PASSENGER_NAME) == string::npos)
 		{
 			serverSoftware.append(" " SERVER_TOKEN_NAME "/" PASSENGER_VERSION);
 		}
 
-		Json::Value updates;
+		json::object updates;
 		updates["server_software"] = serverSoftware;
 		return updates;
 	}
@@ -489,13 +489,13 @@ public:
 		add("oom_score", STRING_TYPE, OPTIONAL | READ_ONLY);
 		addWithDynamicDefault("controller_threads", UINT_TYPE, OPTIONAL | READ_ONLY, getDefaultThreads);
 		add("max_pool_size", UINT_TYPE, OPTIONAL, DEFAULT_MAX_POOL_SIZE);
-		add("pool_idle_time", UINT_TYPE, OPTIONAL, Json::UInt(DEFAULT_POOL_IDLE_TIME));
+		add("pool_idle_time", UINT_TYPE, OPTIONAL, uint64_t(DEFAULT_POOL_IDLE_TIME));
 		add("pool_selfchecks", BOOL_TYPE, OPTIONAL, false);
-		add("prestart_urls", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, Json::arrayValue);
+		add("prestart_urls", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, json::array());
 		add("controller_secure_headers_password", ANY_TYPE, OPTIONAL | SECRET);
 		add("controller_socket_backlog", UINT_TYPE, OPTIONAL | READ_ONLY, DEFAULT_SOCKET_BACKLOG);
 		add("controller_addresses", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, getDefaultControllerAddresses());
-		add("api_server_addresses", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, Json::arrayValue);
+		add("api_server_addresses", STRING_ARRAY_TYPE, OPTIONAL | READ_ONLY, json::array());
 		add("controller_cpu_affine", BOOL_TYPE, OPTIONAL | READ_ONLY, false);
 		add("file_descriptor_ulimit", UINT_TYPE, OPTIONAL | READ_ONLY, 0);
 

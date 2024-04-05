@@ -22,7 +22,7 @@ namespace tut {
 		typedef ClientRef<Server<Client>, Client> ClientRefType;
 
 		BackgroundEventLoop bg;
-		Json::Value config;
+		json::value config;
 		ServerKit::Schema skSchema;
 		ServerKit::Context context;
 		ServerKit::BaseServerSchema schema;
@@ -363,7 +363,7 @@ namespace tut {
 		string data;
 
 		Test25Server(Context *ctx, const ServerKit::BaseServerSchema &schema,
-			const Json::Value &initialConfig)
+			const json::value &initialConfig)
 			: Server<Client>(ctx, schema, initialConfig)
 			{ }
 	};
@@ -399,7 +399,7 @@ namespace tut {
 
 	public:
 		Test26Server(Context *ctx, const ServerKit::BaseServerSchema &schema,
-			const Json::Value &initialConfig)
+			const json::value &initialConfig)
 			: Server<Client>(ctx, schema, initialConfig)
 			{ }
 	};

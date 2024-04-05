@@ -31,6 +31,7 @@
 #include <oxt/initialize.hpp>
 #include <oxt/backtrace.hpp>
 #include <boost/scoped_array.hpp>
+#include <boost/json.hpp>
 
 #include <cstdio>
 #include <cstdlib>
@@ -39,6 +40,7 @@
 #include <cassert>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include <sys/types.h>
@@ -54,7 +56,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <jsoncpp/json.h>
 #include <adhoc_lve.h>
 
 #include <LoggingKit/LoggingKit.h>
@@ -65,6 +66,7 @@
 #include <FileTools/PathManip.h>
 #include <SystemTools/UserDatabase.h>
 #include <Utils.h>
+#include <JsonTools/JsonUtils.h>
 #include <StrIntTools/StrIntUtils.h>
 #include <Core/SpawningKit/Handshake/WorkDir.h>
 #include <Core/SpawningKit/Exceptions.h>
@@ -88,7 +90,7 @@ namespace SpawnEnvSetupper {
 	struct Context {
 		string workDir;
 		Mode mode;
-		Json::Value args;
+		json::value args;
 		SpawningKit::JourneyStep step;
 	};
 
@@ -98,24 +100,25 @@ namespace SpawnEnvSetupper {
 using namespace Passenger::SpawnEnvSetupper;
 
 
-static Json::Value
+static json::value
 readArgsJson(const string &workDir) {
-	Json::Reader reader;
-	Json::Value result;
+	error_code ec;
 	string contents = unsafeReadFile(workDir + "/args.json");
-	if (reader.parse(contents, result)) {
+	json::value result = json::parse(contents, ec);
+	if (!ec) {
 		return result;
 	} else {
 		P_CRITICAL("Cannot parse " << workDir << "/args.json: "
-			<< reader.getFormattedErrorMessages());
+			<< ec.message());
 		exit(1);
 	}
 }
 
 static void
-initializeLogLevel(const Json::Value &args) {
-	if (args.isMember("log_level")) {
-		LoggingKit::setLevel(LoggingKit::Level(args["log_level"].asInt()));
+initializeLogLevel(const json::value &vargs) {
+	const json::object &args = vargs.get_object();
+	if (args.contains("log_level")) {
+		LoggingKit::setLevel(LoggingKit::Level(args.at("log_level").as_int64()));
 	}
 }
 
@@ -272,12 +275,13 @@ dumpAllEnvironmentInfo(const string &workDir) {
 }
 
 static bool
-setUlimits(const Json::Value &args) {
-	if (!args.isMember("file_descriptor_ulimit")) {
+setUlimits(const json::value &vargs) {
+	const json::object &args = vargs.get_object();
+	if (!args.contains("file_descriptor_ulimit")) {
 		return false;
 	}
 
-	rlim_t fdLimit = (rlim_t) args["file_descriptor_ulimit"].asUInt();
+	rlim_t fdLimit = (rlim_t) args.at("file_descriptor_ulimit").as_uint64();
 	struct rlimit limit;
 	int ret;
 
@@ -297,25 +301,27 @@ setUlimits(const Json::Value &args) {
 }
 
 static bool
-canSwitchUser(const Json::Value &args) {
-	return args.isMember("user") && geteuid() == 0;
+canSwitchUser(const json::value &vargs) {
+	const json::object &args = vargs.get_object();
+	return args.contains("user") && geteuid() == 0;
 }
 
 static void
 lookupUserGroup(const Context &context, uid_t *uid, struct passwd **userInfo,
 	gid_t *gid)
 {
-	const Json::Value &args = context.args;
+	const json::object &args = context.args.get_object();
 	errno = 0;
-	*userInfo = getpwnam(args["user"].asCString());
+	const char* user = args.at("user").as_string().c_str();
+	*userInfo = getpwnam(user);
 	if (*userInfo == NULL) {
 		int e = errno;
-		if (looksLikePositiveNumber(args["user"].asString())) {
+		if (looksLikePositiveNumber(user)) {
 			fprintf(stderr,
 				"Warning: error looking up system user database"
 				" entry for user '%s': %s (errno=%d)\n",
-				args["user"].asCString(), strerror(e), e);
-			*uid = (uid_t) atoi(args["user"].asString());
+					user, strerror(e), e);
+			*uid = (uid_t) atoi(user);
 		} else {
 			recordJourneyStepEnd(context, context.step,
 				SpawningKit::STEP_ERRORED);
@@ -324,12 +330,12 @@ lookupUserGroup(const Context &context, uid_t *uid, struct passwd **userInfo,
 			if (e == 0) {
 				recordAndPrintErrorSummary(context.workDir,
 					"Cannot lookup system user database entry for user '"
-					+ args["user"].asString() + "': entry not found",
+					+ getJsonStringField(args,"user") + "': entry not found",
 					true);
 			} else {
 				recordAndPrintErrorSummary(context.workDir,
 					"Cannot lookup system user database entry for user '"
-					+ args["user"].asString() + "': " + strerror(e)
+					+ getJsonStringField(args,"user") + "': " + strerror(e)
 					+ " (errno=" + toString(e) + ")",
 					true);
 			}
@@ -340,15 +346,16 @@ lookupUserGroup(const Context &context, uid_t *uid, struct passwd **userInfo,
 	}
 
 	errno = 0;
-	struct group *groupInfo = getgrnam(args["group"].asCString());
+	const char* group = args.at("group").as_string().c_str();
+	struct group *groupInfo = getgrnam(group);
 	if (groupInfo == NULL) {
 		int e = errno;
-		if (looksLikePositiveNumber(args["group"].asString())) {
+		if (looksLikePositiveNumber(group)) {
 			fprintf(stderr,
 				"Warning: error looking up system group database entry for group '%s':"
 				" %s (errno=%d)\n",
-				args["group"].asCString(), strerror(e), e);
-			*gid = (gid_t) atoi(args["group"].asString());
+				group, strerror(e), e);
+			*gid = (gid_t) atoi(group);
 		} else {
 			recordJourneyStepEnd(context, context.step,
 				SpawningKit::STEP_ERRORED);
@@ -357,12 +364,12 @@ lookupUserGroup(const Context &context, uid_t *uid, struct passwd **userInfo,
 			if (e == 0) {
 				recordAndPrintErrorSummary(context.workDir,
 					"Cannot lookup up system group database entry for group '"
-					+ args["group"].asString() + "': entry not found",
+					+ getJsonStringField(args,"group") + "': entry not found",
 					true);
 			} else {
 				recordAndPrintErrorSummary(context.workDir,
 					"Cannot lookup up system group database entry for group '"
-					+ args["group"].asString() + "': " + strerror(e)
+					+ getJsonStringField(args,"group") + "': " + strerror(e)
 					+ " (errno=" + toString(e) + ")",
 					true);
 			}
@@ -582,7 +589,7 @@ inferAllParentDirectories(const string &path) {
 
 static void
 setCurrentWorkingDirectory(const Context &context) {
-	string appRoot = context.args["app_root"].asString(); // Already absolutized by HandshakePreparer
+	string appRoot = getJsonStringField(context.args,"app_root"); // Already absolutized by HandshakePreparer
 	vector<string> appRootAndParentDirs = inferAllParentDirectories(appRoot);
 	vector<string>::const_iterator it;
 	int ret;
@@ -685,45 +692,47 @@ setCurrentWorkingDirectory(const Context &context) {
 	setenv("PWD", appRoot.c_str(), 1);
 }
 
-static string
-findRubyopt(const Json::Value &args) {
-	if (!args.isMember("environment_variables")) return "";
-	const Json::Value &envvars = args["environment_variables"];
-	Json::Value::const_iterator it, end = envvars.end();
+string
+findRubyopt(const json::value &vargs) {
+	const json::object &args = vargs.get_object();
+	if (!args.contains("environment_variables")) return "";
+	const json::object &envvars = args.at("environment_variables").get_object();
+	json::object::const_iterator it, end = envvars.end();
 
 	for (it = envvars.begin(); it != end; it++) {
-		if (it.name() == "RUBYOPT") {
-			return it->asString();
+		if (it->key() == "RUBYOPT") {
+			return jsonValueToString(it->value());
 		}
 	}
 	return "";
 }
 
 static void
-setDefaultEnvvars(const Json::Value &args) {
+setDefaultEnvvars(const json::value &vargs) {
+	const json::object &args = vargs.get_object();
 	setenv("PYTHONUNBUFFERED", "1", 1);
 
-	setenv("NODE_PATH", args["node_libdir"].asCString(), 1);
+	setenv("NODE_PATH", getJsonCStringField(args, "node_libdir"), 1);
 
-	setenv("RAILS_ENV", args["app_env"].asCString(), 1);
-	setenv("RACK_ENV", args["app_env"].asCString(), 1);
-	setenv("WSGI_ENV", args["app_env"].asCString(), 1);
-	setenv("NODE_ENV", args["app_env"].asCString(), 1);
-	setenv("PASSENGER_APP_ENV", args["app_env"].asCString(), 1);
+	setenv("RAILS_ENV", getJsonCStringField(args,"app_env"), 1);
+	setenv("RACK_ENV", getJsonCStringField(args,"app_env"), 1);
+	setenv("WSGI_ENV", getJsonCStringField(args,"app_env"), 1);
+	setenv("NODE_ENV", getJsonCStringField(args,"app_env"), 1);
+	setenv("PASSENGER_APP_ENV", getJsonCStringField(args,"app_env"), 1);
 
-	if (args.isMember("expected_start_port")) {
-		setenv("PORT", toString(args["expected_start_port"].asInt()).c_str(), 1);
+	if (args.contains("expected_start_port")) {
+		setenv("PORT", jsonValueToString(args.at("expected_start_port")).c_str(), 1);
 	}
 
-	if (args.isMember("preload_bundler") && args["preload_bundler"].asBool()) {
+	if (args.contains("preload_bundler") && getJsonBoolField(args,"preload_bundler")) {
 		string rubyopt = findRubyopt(args) + " -r bundler/setup";
 		setenv("RUBYOPT", rubyopt.c_str(), 1);
 	}
 
-	if (args["base_uri"].asString() != "/") {
-		setenv("RAILS_RELATIVE_URL_ROOT", args["base_uri"].asCString(), 1);
-		setenv("RACK_BASE_URI", args["base_uri"].asCString(), 1);
-		setenv("PASSENGER_BASE_URI", args["base_uri"].asCString(), 1);
+	if (getJsonStringField(args,"base_uri") != "/") {
+		setenv("RAILS_RELATIVE_URL_ROOT", getJsonCStringField(args,"base_uri"), 1);
+		setenv("RACK_BASE_URI", getJsonCStringField(args,"base_uri"), 1);
+		setenv("PASSENGER_BASE_URI", getJsonCStringField(args,"base_uri"), 1);
 	} else {
 		unsetenv("RAILS_RELATIVE_URL_ROOT");
 		unsetenv("RACK_BASE_URI");
@@ -732,15 +741,16 @@ setDefaultEnvvars(const Json::Value &args) {
 }
 
 static void
-setGivenEnvVars(const Json::Value &args) {
-	const Json::Value &envvars = args["environment_variables"];
-	Json::Value::const_iterator it, end = envvars.end();
+setGivenEnvVars(const json::value &vargs) {
+	const json::object &args = vargs.get_object();
+	const json::object &envvars = getJsonObjectField(args,"environment_variables");
+	json::object::const_iterator it, end = envvars.end();
 
 	for (it = envvars.begin(); it != end; it++) {
-		string key = it.name();
-		string value = it->asString();
-		if(args.isMember("preload_bundler") &&
-		   args["preload_bundler"].asBool()){
+		string key = it->key();
+		json::string value = it->value().as_string();
+		if(args.contains("preload_bundler") &&
+		   getJsonBoolField(args,"preload_bundler")){
 			if (key == "RUBYOPT") {
 				value += " -r bundler/setup";
 			}
@@ -750,10 +760,11 @@ setGivenEnvVars(const Json::Value &args) {
 }
 
 static bool
-shouldLoadShellEnvvars(const Json::Value &args, const string &shell) {
+shouldLoadShellEnvvars(const json::value &vargs, const string &shell) {
+	const json::object &args = vargs.get_object();
 	// Note: `shell` could be empty:
 	// https://github.com/phusion/passenger/issues/2078
-	if (args["load_shell_envvars"].asBool()) {
+	if (getJsonBoolField(args,"load_shell_envvars")) {
 		string shellName = extractBaseName(shell);
 		bool result = shellName == "bash" || shellName == "zsh" || shellName == "ksh";
 		#if defined(__linux__) || defined(__APPLE__)
@@ -822,23 +833,23 @@ execNextCommand(const Context &context, const string &shell)
 		} else {
 			nextJourneyStep = SpawningKit::SUBPROCESS_SPAWN_ENV_SETUPPER_AFTER_SHELL;
 		}
-		commandArgs.push_back(context.args["passenger_agent_path"].asCString());
+		commandArgs.push_back(getJsonCStringField(context.args,"passenger_agent_path"));
 		commandArgs.push_back("spawn-env-setupper");
 		commandArgs.push_back(context.workDir.c_str());
 		commandArgs.push_back("--after");
 	} else {
-		if (context.args["starts_using_wrapper"].asBool()) {
+		if (getJsonBoolField(context.args,"starts_using_wrapper")) {
 			nextJourneyStep = SpawningKit::SUBPROCESS_EXEC_WRAPPER;
 		} else {
 			nextJourneyStep = SpawningKit::SUBPROCESS_APP_LOAD_OR_EXEC;
 		}
-		if (context.args.isMember("_bin_sh_path")) {
+		if (context.args.get_object().contains("_bin_sh_path")) {
 			// Used in unit tests
-			binShPath = context.args["_bin_sh_path"].asString();
+			binShPath = getJsonStringField(context.args,"_bin_sh_path");
 		} else {
 			binShPath = "/bin/sh";
 		}
-		binShParam = "exec " + context.args["start_command"].asString();
+		binShParam = "exec " + getJsonStringField(context.args,"start_command");
 		commandArgs.push_back(binShPath.c_str());
 		commandArgs.push_back("-c");
 		commandArgs.push_back(binShParam.c_str());

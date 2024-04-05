@@ -66,12 +66,12 @@ public:
 		return finalized;
 	}
 
-	virtual Json::Value translate(const Json::Value &doc) const {
+	virtual json::object translate(const json::object &doc) const {
 		assert(finalized);
 		return Translator::translate(doc);
 	}
 
-	virtual Json::Value reverseTranslate(const Json::Value &doc) const {
+	virtual json::object reverseTranslate(const json::object &doc) const {
 		assert(finalized);
 		return Translator::reverseTranslate(doc);
 	}

@@ -273,9 +273,9 @@ Passenger::SpawningKit::Config::validate(vector<StaticString> &errors) const {
 	return ok;
 }
 
-inline Json::Value
+inline json::value
 Passenger::SpawningKit::Config::getConfidentialFieldsToPassToApp() const {
-	Json::Value doc;
+	json::object doc;
 	const Config &config = *this;
 
 	doc["app_group_name"] = appGroupName.toString();
@@ -330,9 +330,9 @@ Passenger::SpawningKit::Config::getConfidentialFieldsToPassToApp() const {
 	return doc;
 }
 
-inline Json::Value
+inline json::value
 Passenger::SpawningKit::Config::getNonConfidentialFieldsToPassToApp() const {
-	Json::Value doc;
+	json::object doc;
 	const Config &config = *this;
 
 	doc["app_group_name"] = appGroupName.toString();

@@ -29,9 +29,9 @@ namespace tut {
 
 			MyController(ServerKit::Context *context,
 				const Core::ControllerSchema &schema,
-				const Json::Value &initialConfig,
+				const json::value &initialConfig,
 				const Core::ControllerSingleAppModeSchema &singleAppModeSchema,
-				const Json::Value &singleAppModeConfig)
+				const json::value &singleAppModeConfig)
 				: Core::Controller(context, schema, initialConfig, ConfigKit::DummyTranslator(),
 					&singleAppModeSchema, &singleAppModeConfig, ConfigKit::DummyTranslator())
 				{ }
@@ -49,7 +49,7 @@ namespace tut {
 		SpawningKit::FactoryPtr spawningKitFactory;
 		ApplicationPool2::Context apContext;
 		PoolPtr appPool;
-		Json::Value config, singleAppModeConfig;
+		json::value config, singleAppModeConfig;
 		int serverSocket;
 		TestSession testSession;
 		FileDescriptor clientConnection;
@@ -176,14 +176,14 @@ namespace tut {
 			*state = controller->serverState;
 		}
 
-		Json::Value inspectStateAsJson() {
-			Json::Value result;
+		json::value inspectStateAsJson() {
+			json::value result;
 			bg.safe->runSync(boost::bind(&Core_ControllerTest::_inspectStateAsJson,
 				this, &result));
 			return result;
 		}
 
-		void _inspectStateAsJson(Json::Value *result) {
+		void _inspectStateAsJson(json::value *result) {
 			*result = controller->inspectStateAsJson();
 		}
 
@@ -364,8 +364,8 @@ namespace tut {
 			"hello");
 		waitUntilSessionInitiated();
 
-		Json::Value state = inspectStateAsJson();
-		Json::Value reqState = state["active_clients"]["1-1"]["current_request"];
+		json::value state = inspectStateAsJson();
+		json::value reqState = state["active_clients"]["1-1"]["current_request"];
 		ensure("Body buffering is on", reqState.isMember("body_bytes_buffered"));
 
 		ensure(containsSubstring(readPeerRequestHeader(),
@@ -396,8 +396,8 @@ namespace tut {
 			"0\r\n\r\n");
 		waitUntilSessionInitiated();
 
-		Json::Value state = inspectStateAsJson();
-		Json::Value reqState = state["active_clients"]["1-1"]["current_request"];
+		json::value state = inspectStateAsJson();
+		json::value reqState = state["active_clients"]["1-1"]["current_request"];
 		ensure("Body buffering is on", reqState.isMember("body_bytes_buffered"));
 
 		string header = readPeerRequestHeader();
@@ -428,8 +428,8 @@ namespace tut {
 			"\r\n");
 		waitUntilSessionInitiated();
 
-		Json::Value state = inspectStateAsJson();
-		Json::Value reqState = state["active_clients"]["1-1"]["current_request"];
+		json::value state = inspectStateAsJson();
+		json::value reqState = state["active_clients"]["1-1"]["current_request"];
 		ensure("Body buffering is off", !reqState.isMember("body_bytes_buffered"));
 
 		string header = readPeerRequestHeader();
@@ -468,8 +468,8 @@ namespace tut {
 			"hello");
 		waitUntilSessionInitiated();
 
-		Json::Value state = inspectStateAsJson();
-		Json::Value reqState = state["active_clients"]["1-1"]["current_request"];
+		json::value state = inspectStateAsJson();
+		json::value reqState = state["active_clients"]["1-1"]["current_request"];
 		ensure("Body buffering is off", !reqState.isMember("body_bytes_buffered"));
 
 		ensure(containsSubstring(readPeerRequestHeader(),
@@ -496,8 +496,8 @@ namespace tut {
 			"0\r\n\r\n");
 		waitUntilSessionInitiated();
 
-		Json::Value state = inspectStateAsJson();
-		Json::Value reqState = state["active_clients"]["1-1"]["current_request"];
+		json::value state = inspectStateAsJson();
+		json::value reqState = state["active_clients"]["1-1"]["current_request"];
 		ensure("Body buffering is off", !reqState.isMember("body_bytes_buffered"));
 
 		string header = readPeerRequestHeader();
@@ -527,8 +527,8 @@ namespace tut {
 			"\r\n");
 		waitUntilSessionInitiated();
 
-		Json::Value state = inspectStateAsJson();
-		Json::Value reqState = state["active_clients"]["1-1"]["current_request"];
+		json::value state = inspectStateAsJson();
+		json::value reqState = state["active_clients"]["1-1"]["current_request"];
 		ensure("Body buffering is off", !reqState.isMember("body_bytes_buffered"));
 
 		string header = readPeerRequestHeader();

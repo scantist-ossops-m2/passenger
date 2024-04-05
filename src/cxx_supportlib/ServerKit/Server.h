@@ -53,7 +53,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <cstdio>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <LoggingKit/LoggingKit.h>
 #include <SafeLibev.h>
@@ -189,10 +189,10 @@ struct BaseServerConfigRealization {
 	unsigned int clientFreelistLimit: 12;
 
 	BaseServerConfigRealization(const ConfigKit::Store &config)
-		: acceptBurstCount(config["accept_burst_count"].asUInt()),
-		  startReadingAfterAccept(config["start_reading_after_accept"].asBool()),
-		  minSpareClients(config["min_spare_clients"].asUInt()),
-		  clientFreelistLimit(config["client_freelist_limit"].asUInt())
+		: acceptBurstCount(config["accept_burst_count"].as_uint64()),
+		  startReadingAfterAccept(config["start_reading_after_accept"].as_bool()),
+		  minSpareClients(config["min_spare_clients"].as_uint64()),
+		  clientFreelistLimit(config["client_freelist_limit"].as_uint64())
 		{ }
 
 	void swap(BaseServerConfigRealization &other) BOOST_NOEXCEPT_OR_NOTHROW {
@@ -730,7 +730,7 @@ public:
 	/***** Public methods *****/
 
 	BaseServer(Context *context, const BaseServerSchema &schema,
-		const Json::Value &initialConfig = Json::Value(),
+		const json::object &initialConfig = json::object(),
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: config(schema, initialConfig, translator),
 		  configRlz(config),
@@ -1102,10 +1102,10 @@ public:
 		return P_STATIC_STRING("Server");
 	}
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::value &updates,
 		vector<ConfigKit::Error> &errors, BaseServerConfigChangeRequest &req)
 	{
-		req.config.reset(new ConfigKit::Store(config, updates, errors));
+		req.config.reset(new ConfigKit::Store(config, updates.get_object(), errors));
 		if (errors.empty()) {
 			req.configRlz.reset(new BaseServerConfigRealization(*req.config));
 		}
@@ -1119,33 +1119,40 @@ public:
 		configRlz.swap(*req.configRlz);
 	}
 
-	virtual Json::Value inspectConfig() const {
+	virtual json::value inspectConfig() const {
 		return config.inspect();
 	}
 
-	virtual Json::Value inspectStateAsJson() const {
-		Json::Value doc = ctx->inspectStateAsJson();
+	virtual json::value inspectStateAsJson() const {
+		json::object doc = ctx->inspectStateAsJson().get_object();
 		const Client *client;
 
 		doc["pid"] = (unsigned int) getpid();
 		doc["server_state"] = getServerStateString();
 		doc["free_client_count"] = freeClientCount;
-		Json::Value &activeClientsDoc = doc["active_clients"] = Json::Value(Json::objectValue);
 		doc["active_client_count"] = activeClientCount;
-		Json::Value &disconnectedClientsDoc = doc["disconnected_clients"] = Json::Value(Json::objectValue);
 		doc["disconnected_client_count"] = disconnectedClientCount;
 		doc["peak_active_client_count"] = peakActiveClientCount;
-		doc["client_accept_speed"]["1m"] = averageSpeedToJson(
+		if (!doc.contains("client_accept_speed")) {
+			doc["client_accept_speed"] = json::object();
+		}
+		json::object &clientAcceptSpeedDoc = doc["client_accept_speed"].get_object();
+		clientAcceptSpeedDoc["1m"] = averageSpeedToJson(
 			capFloatPrecision(clientAcceptSpeed1m * 60),
 			"minute", "1 minute", -1);
-		doc["client_accept_speed"]["1h"] = averageSpeedToJson(
+		clientAcceptSpeedDoc["1h"] = averageSpeedToJson(
 			capFloatPrecision(clientAcceptSpeed1h * 60),
 			"minute", "1 hour", -1);
-		doc["total_clients_accepted"] = (Json::UInt64) totalClientsAccepted;
-		doc["total_bytes_consumed"] = (Json::UInt64) totalBytesConsumed;
+		doc["total_clients_accepted"] = (uint64_t) totalClientsAccepted;
+		doc["total_bytes_consumed"] = (uint64_t) totalBytesConsumed;
+
+		doc["active_clients"] = json::object();
+		doc["disconnected_clients"] = json::object();
+		json::object &activeClientsDoc = doc["active_clients"].get_object();
+		json::object &disconnectedClientsDoc = doc["disconnected_clients"].get_object();
 
 		TAILQ_FOREACH (client, &activeClients, nextClient.activeOrDisconnectedClient) {
-			Json::Value subdoc;
+			json::value subdoc;
 			char clientName[16];
 
 			getClientName(client, clientName, sizeof(clientName));
@@ -1153,7 +1160,7 @@ public:
 		}
 
 		TAILQ_FOREACH (client, &disconnectedClients, nextClient.activeOrDisconnectedClient) {
-			Json::Value subdoc;
+			json::value subdoc;
 			char clientName[16];
 
 			getClientName(client, clientName, sizeof(clientName));
@@ -1163,8 +1170,8 @@ public:
 		return doc;
 	}
 
-	virtual Json::Value inspectClientStateAsJson(const Client *client) const {
-		Json::Value doc;
+	virtual json::value inspectClientStateAsJson(const Client *client) const {
+		json::object doc;
 		char clientName[16];
 
 		assert(client->getConnState() != Client::IN_FREELIST);
@@ -1244,7 +1251,7 @@ template <typename Client = Client>
 class Server: public BaseServer<Server<Client>, Client> {
 public:
 	Server(Context *context, const BaseServerSchema &schema,
-		const Json::Value &initialConfig = Json::Value())
+		const json::value &initialConfig = json::value())
 		: BaseServer<Server, Client>(context, schema, initialConfig)
 		{ }
 };

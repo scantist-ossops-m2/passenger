@@ -47,6 +47,7 @@
 #include <SystemTools/SystemTime.h>
 #include <StrIntTools/StrIntUtils.h>
 #include <Utils/Lock.h>
+#include <JsonTools/JsonUtils.h>
 #include <Core/ApplicationPool/Common.h>
 #include <Core/ApplicationPool/Socket.h>
 #include <Core/ApplicationPool/Session.h>
@@ -202,15 +203,14 @@ private:
 		String codeRevision;
 	};
 
-	void appendJsonFieldToBuffer(std::string &buffer, const Json::Value &json,
+	void appendJsonFieldToBuffer(std::string &buffer, const json::value &json,
 		const char *key, InitializationLog::String &str, bool required = true) const
 	{
 		StaticString value;
 		if (required) {
 			value = getJsonStaticStringField(json, key);
 		} else {
-			value = getJsonStaticStringField(json, Json::StaticString(key),
-				StaticString());
+			value = getJsonStaticStringField(json, key, StaticString());
 		}
 		str.offset = buffer.size();
 		str.size   = value.size();
@@ -219,18 +219,19 @@ private:
 	}
 
 	void initializeSocketsAndStringFields(const SpawningKit::Result &result) {
-		Json::Value doc, sockets(Json::arrayValue);
+		json::object doc;
+		json::array sockets;
 		vector<SpawningKit::Result::Socket>::const_iterator it, end = result.sockets.end();
 
 		for (it = result.sockets.begin(); it != end; it++) {
-			sockets.append(it->inspectAsJson());
+			sockets.push_back(it->inspectAsJson());
 		}
 
 		doc["sockets"] = sockets;
 		initializeSocketsAndStringFields(doc);
 	}
 
-	void initializeSocketsAndStringFields(const Json::Value &json) {
+	void initializeSocketsAndStringFields(const json::value &json) {
 		InitializationLog log;
 		string buffer;
 
@@ -238,14 +239,12 @@ private:
 		// Step 1: append strings to temporary buffer and take note of their
 		// offsets within the temporary buffer.
 
-		Json::Value sockets = getJsonField(json, "sockets");
-		// The const_cast here works around a jsoncpp bug.
-		Json::Value::const_iterator it = const_cast<const Json::Value &>(sockets).begin();
-		Json::Value::const_iterator end = const_cast<const Json::Value &>(sockets).end();
+		const json::array &sockets = getJsonField(json, "sockets").as_array();
+		json::array::const_iterator it = sockets.begin(), end = sockets.end();
 		buffer.reserve(1024);
 
 		for (it = sockets.begin(); it != end; it++) {
-			const Json::Value &socket = *it;
+			const json::value &socket = *it;
 			InitializationLog::SocketStringOffsets offsets;
 
 			appendJsonFieldToBuffer(buffer, socket, "address", offsets.address);
@@ -256,7 +255,7 @@ private:
 			log.socketStringOffsets.push_back(offsets);
 		}
 
-		if (json.isMember("code_revision")) {
+		if (json.get_object().contains("code_revision")) {
 			appendJsonFieldToBuffer(buffer, json, "code_revision", log.codeRevision);
 		}
 
@@ -273,9 +272,9 @@ private:
 		unsigned int i;
 		const char *base = this->stringBuffer.data;
 
-		it = const_cast<const Json::Value &>(sockets).begin();
+		it = sockets.cbegin();
 		for (i = 0; it != end; it++, i++) {
-			const Json::Value &socket = *it;
+			const json::value &socket = *it;
 			this->sockets.add(
 				info.pid,
 				StaticString(base + log.socketStringOffsets[i].address.offset,
@@ -289,7 +288,7 @@ private:
 			);
 		}
 
-		if (json.isMember("code_revision")) {
+		if (json.get_object().contains("code_revision")) {
 			codeRevision = StaticString(base + log.codeRevision.offset,
 				log.codeRevision.size);
 		}
@@ -447,13 +446,13 @@ public:
 	ProcessMetrics metrics;
 
 
-	Process(const BasicGroupInfo *groupInfo, const Json::Value &args)
+	Process(const BasicGroupInfo *groupInfo, const json::value &args)
 		: info(this, groupInfo, args),
 		  socketsAcceptingHttpRequestsCount(0),
 		  spawnerCreationTime(getJsonUint64Field(args, "spawner_creation_time")),
 		  spawnStartTime(getJsonUint64Field(args, "spawn_start_time")),
 		  spawnEndTime(SystemTime::getUsec()),
-		  type(args["type"] == "dummy" ? SpawningKit::Result::DUMMY : SpawningKit::Result::UNKNOWN),
+		  type(args.at("type").get_string() == "dummy" ? SpawningKit::Result::DUMMY : SpawningKit::Result::UNKNOWN),
 		  requiresShutdown(false),
 		  refcount(1),
 		  index(-1),
@@ -472,10 +471,10 @@ public:
 	}
 
 	Process(const BasicGroupInfo *groupInfo, const SpawningKit::Result &skResult,
-		const Json::Value &args)
+		const json::value &args)
 		: info(this, groupInfo, skResult),
 		  socketsAcceptingHttpRequestsCount(0),
-		  spawnerCreationTime(getJsonUint64Field(args, "spawner_creation_time")),
+		  spawnerCreationTime(args.at("spawner_creation_time").get_uint64()),
 		  spawnStartTime(skResult.spawnStartTime),
 		  spawnEndTime(skResult.spawnEndTime),
 		  type(skResult.type),
@@ -502,8 +501,9 @@ public:
 			SpawningKit::PipeWatcherPtr watcher = boost::make_shared<SpawningKit::PipeWatcher>(
 				outputPipe, "output", getAppGroupName(groupInfo),
 				getAppLogFile(groupInfo), skResult.pid);
-			if (!args["log_file"].isNull()) {
-				watcher->setLogFile(args["log_file"].asString());
+			const json::object &oargs = args.get_object();
+			if (oargs.contains("log_file") && !oargs.at("log_file").is_null()) {
+				watcher->setLogFile(getJsonStringField(oargs,"log_file"));
 			}
 			watcher->initialize();
 			watcher->start();

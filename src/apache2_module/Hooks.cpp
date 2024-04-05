@@ -239,8 +239,8 @@ private:
 	boost::mutex cstatMutex;
 	boost::mutex configMutex;
 
-	static Json::Value strsetToJson(const set<string> &input) {
-		Json::Value result(Json::arrayValue);
+	static json::value strsetToJson(const set<string> &input) {
+		json::value result(Json::arrayValue);
 		set<string>::const_iterator it, end = input.end();
 		for (it = input.begin(); it != end; it++) {
 			result.append(*it);
@@ -248,17 +248,17 @@ private:
 		return result;
 	}
 
-	static Json::Value nonEmptyString(const char *str) {
+	static json::value nonEmptyString(const char *str) {
 		if (str != NULL && *str != '\0') {
 			return str;
 		} else {
-			return Json::Value();
+			return json::value();
 		}
 	}
 
-	static Json::Value nonEmptyString(const string &str) {
+	static json::value nonEmptyString(const string &str) {
 		if (str.empty()) {
-			return Json::Value();
+			return json::value();
 		} else {
 			return str;
 		}
@@ -1270,7 +1270,7 @@ public:
 		wrapperRegistry.finalize();
 		postprocessConfig(s, pconf, ptemp);
 
-		Json::Value loggingConfig;
+		json::value loggingConfig;
 		loggingConfig["level"] = LoggingKit::Level(serverConfig.logLevel);
 		loggingConfig["redirect_stderr"] = false;
 		if (!serverConfig.logFile.empty()) {
@@ -1327,7 +1327,7 @@ public:
 		}
 
 		// Note: WatchdogLauncher::start() sets a number of default values.
-		Json::Value config;
+		json::value config;
 		config["web_server_module_version"] = PASSENGER_VERSION;
 		config["web_server_version"] = webServerVersion;
 		config["server_software"] = webServerDesc;
@@ -1387,7 +1387,7 @@ public:
 			}
 		}
 
-		Json::Value::iterator it, end = serverConfig.ctl.end();
+		json::value::iterator it, end = serverConfig.ctl.end();
 		for (it = serverConfig.ctl.begin(); it != end; it++) {
 			config[it.name()] = *it;
 		}

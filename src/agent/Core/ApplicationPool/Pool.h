@@ -126,9 +126,9 @@ public:
 			  verbose(options.getBool("verbose", false, false))
 			{ }
 
-		InspectOptions(const Json::Value &options)
-			: colorize(options.get("colorize", false).asBool()),
-			  verbose(options.get("verbose", false).asBool())
+		InspectOptions(const json::value &options)
+			: colorize(options.get_object().contains("colorize") && options.at("colorize").get_bool()),
+			  verbose(options.get_object().contains("verbose") && options.at("verbose").get_bool())
 			{ }
 
 		static InspectOptions makeAuthorized() {
@@ -173,18 +173,18 @@ public:
 			  applicationIdsFilter(0, 0)
 			{ }
 
-		void set(const Json::Value &_options) {
+		void set(const json::value &_options) {
 			ConfigKit::Schema schema = createSchema();
 			ConfigKit::Store options(schema, _options);
 
-			if (!options["application_ids"].isNull()) {
+			if (!options["application_ids"].is_null()) {
 				hasApplicationIdsFilter = true;
 				applicationIdsFilter = StringKeyTable<bool>();
 
-				const Json::Value subdoc = options["application_ids"];
-				Json::Value::const_iterator it, end = subdoc.end();
+				const json::array subdoc = options["application_ids"].get_array();
+				json::array::const_iterator it, end = subdoc.end();
 				for (it = subdoc.begin(); it != end; it++) {
-					applicationIdsFilter.insert(it->asString(), true);
+					applicationIdsFilter.insert(it->as_string(), true);
 				}
 			}
 		}
@@ -424,12 +424,12 @@ public:
 
 	/****** State inspection ******/
 
-	static Json::Value makeSingleValueJsonConfigFormat(const Json::Value &v,
-		const Json::Value &defaultValue = Json::Value());
-	static Json::Value makeSingleStrValueJsonConfigFormat(const StaticString &val);
-	static Json::Value makeSingleStrValueJsonConfigFormat(const StaticString &val,
+	static json::value makeSingleValueJsonConfigFormat(const json::value &v,
+		const json::value &defaultValue = json::value());
+	static json::value makeSingleStrValueJsonConfigFormat(const StaticString &val);
+	static json::value makeSingleStrValueJsonConfigFormat(const StaticString &val,
 		const StaticString &defaultValue);
-	static Json::Value makeSingleNonEmptyStrValueJsonConfigFormat(const StaticString &val);
+	static json::value makeSingleNonEmptyStrValueJsonConfigFormat(const StaticString &val);
 	unsigned int capacityUsedUnlocked() const;
 	bool atFullCapacityUnlocked() const;
 	void inspectProcessList(const InspectOptions &options, stringstream &result,
@@ -492,8 +492,8 @@ public:
 		bool lock = true) const;
 	string toXml(const ToXmlOptions &options = ToXmlOptions::makeAuthorized(),
 		bool lock = true) const;
-	Json::Value inspectPropertiesInAdminPanelFormat(const ToJsonOptions &options = ToJsonOptions::makeAuthorized()) const;
-	Json::Value inspectConfigInAdminPanelFormat(const ToJsonOptions &options = ToJsonOptions::makeAuthorized()) const;
+	json::value inspectPropertiesInAdminPanelFormat(const ToJsonOptions &options = ToJsonOptions::makeAuthorized()) const;
+	json::value inspectConfigInAdminPanelFormat(const ToJsonOptions &options = ToJsonOptions::makeAuthorized()) const;
 
 
 	/****** Miscellaneous ******/

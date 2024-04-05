@@ -57,7 +57,7 @@
 
 int
 main(int argc, char *argv[]) {
-	Passenger::Json::Value doc(Passenger::Json::objectValue);
+	Passenger::json::value doc(Passenger::json::object);
 
 	doc["Passenger::Core::AdminPanelConnector::Schema"] = Passenger::Core::AdminPanelConnector::Schema().inspect();
 	doc["Passenger::Core::ApiServer::Schema"] = Passenger::Core::ApiServer::Schema().inspect();

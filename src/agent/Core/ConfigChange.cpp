@@ -24,14 +24,17 @@
  *  THE SOFTWARE.
  */
 
+#include <boost/json.hpp>
 #include <boost/thread.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <vector>
 #include <cassert>
 
 #include <LoggingKit/LoggingKit.h>
+#include <ConfigKit/Common.h>
 #include <Core/ConfigChange.h>
 #include <Core/Config.h>
+#include <Core/Controller/Config.h>
 
 namespace Passenger {
 namespace Core {
@@ -40,7 +43,7 @@ using namespace std;
 
 
 struct ConfigChangeRequest {
-	Json::Value updates;
+	json::value updates;
 	PrepareConfigChangeCallback prepareCallback;
 	CommitConfigChangeCallback commitCallback;
 	unsigned int counter;
@@ -87,10 +90,10 @@ asyncPrepareConfigChangeCompletedOne(ConfigChangeRequest *req) {
 	if (req->counter == 0) {
 		req->errors = ConfigKit::deduplicateErrors(req->errors);
 		if (req->errors.empty()) {
-			P_INFO("Changing configuration: " << req->updates.toStyledString());
+			P_INFO("Changing configuration: " << json::serialize(req->updates));
 		} else {
 			P_ERROR("Error changing configuration: " << ConfigKit::toString(req->errors)
-				<< "\nThe proposed configuration was: " << req->updates.toStyledString());
+					<< "\nThe proposed configuration was: " << json::serialize(req->updates));
 		}
 		oxt::thread(boost::bind(req->prepareCallback, req->errors, req),
 			"Core config callback thread",
@@ -99,7 +102,7 @@ asyncPrepareConfigChangeCompletedOne(ConfigChangeRequest *req) {
 }
 
 static void
-asyncPrepareConfigChangeForController(unsigned int i, const Json::Value &updates, ConfigChangeRequest *req) {
+asyncPrepareConfigChangeForController(unsigned int i, const json::value &updates, ConfigChangeRequest *req) {
 	ThreadWorkingObjects *two = &workingObjects->threadWorkingObjects[i];
 	vector<ConfigKit::Error> errors1, errors2;
 
@@ -124,7 +127,7 @@ asyncPrepareConfigChangeForController(unsigned int i, const Json::Value &updates
 }
 
 static void
-asyncPrepareConfigChangeForApiServer(const Json::Value &updates, ConfigChangeRequest *req) {
+asyncPrepareConfigChangeForApiServer(const json::value &updates, ConfigChangeRequest *req) {
 	vector<ConfigKit::Error> errors1, errors2;
 
 	ConfigKit::prepareConfigChangeForSubComponent(
@@ -162,10 +165,10 @@ asyncPrepareConfigChangeForAdminPanelConnectorDone(const vector<ConfigKit::Error
 //
 
 void
-asyncPrepareConfigChange(const Json::Value &updates, ConfigChangeRequest *req,
+asyncPrepareConfigChange(const json::value &updates, ConfigChangeRequest *req,
 	const PrepareConfigChangeCallback &callback)
 {
-	P_DEBUG("Preparing configuration change: " << updates.toStyledString());
+	P_DEBUG("Preparing configuration change: " << json::serialize(updates));
 	WorkingObjects *wo = workingObjects;
 	boost::lock_guard<boost::mutex> l(workingObjects->configSyncher);
 
@@ -173,7 +176,7 @@ asyncPrepareConfigChange(const Json::Value &updates, ConfigChangeRequest *req,
 	req->prepareCallback = callback;
 	req->counter++;
 
-	req->config.reset(new ConfigKit::Store(*coreConfig, updates, req->errors));
+	req->config.reset(new ConfigKit::Store(*coreConfig, updates.get_object(), req->errors));
 	if (!req->errors.empty()) {
 		asyncPrepareConfigChangeCompletedOne(req);
 		return;
@@ -215,7 +218,7 @@ asyncPrepareConfigChange(const Json::Value &updates, ConfigChangeRequest *req,
 	if (wo->adminPanelConnector != NULL) {
 		req->counter++;
 		wo->adminPanelConnector->asyncPrepareConfigChange(
-			coreSchema->adminPanelConnector.translator.translate(updates),
+			coreSchema->adminPanelConnector.translator.translate(updates.get_object()),
 			req->forAdminPanelConnector,
 			boost::bind(asyncPrepareConfigChangeForAdminPanelConnectorDone,
 				boost::placeholders::_1, boost::placeholders::_2, req));
@@ -300,9 +303,9 @@ asyncCommitConfigChange(ConfigChangeRequest *req, const CommitConfigChangeCallba
 			req->forTelemetryCollector);
 	}
 
-	wo->appPool->setMax(coreConfig->get("max_pool_size").asInt());
-	wo->appPool->setMaxIdleTime(coreConfig->get("pool_idle_time").asInt() * 1000000ULL);
-	wo->appPool->enableSelfChecking(coreConfig->get("pool_selfchecks").asBool());
+	wo->appPool->setMax(coreConfig->get("max_pool_size").as_int64());
+	wo->appPool->setMaxIdleTime(coreConfig->get("pool_idle_time").as_int64() * 1000000ULL);
+	wo->appPool->enableSelfChecking(coreConfig->get("pool_selfchecks").as_bool());
 	{
 		LockGuard l(wo->appPoolContext->agentConfigSyncher);
 		wo->appPoolContext->agentConfig = coreConfig->inspectEffectiveValues();
@@ -349,19 +352,19 @@ freeConfigChangeRequest(ConfigChangeRequest *req) {
 	delete req;
 }
 
-Json::Value
+json::value
 inspectConfig() {
 	boost::lock_guard<boost::mutex> l(workingObjects->configSyncher);
 	return coreConfig->inspect();
 }
 
 
-Json::Value
+json::value
 manipulateLoggingKitConfig(const ConfigKit::Store &coreConfig,
-	const Json::Value &loggingKitConfig)
+	const json::value &loggingKitConfig)
 {
-	Json::Value result = loggingKitConfig;
-	result["buffer_logs"] = !coreConfig["admin_panel_url"].isNull();
+	json::object result = loggingKitConfig.get_object();
+	result["buffer_logs"] = !coreConfig["admin_panel_url"].is_null();
 	return result;
 }
 

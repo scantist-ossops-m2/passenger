@@ -31,7 +31,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <ev.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 #include <MemoryKit/mbuf.h>
 #include <ServerKit/Context.h>
 #include <ServerKit/Channel.h>
@@ -237,10 +237,11 @@ public:
 		this->hooks = hooks;
 	}
 
-	Json::Value inspectAsJson() const {
-		Json::Value doc = Channel::inspectAsJson();
-		doc["initialized"] = watcher.fd != -1;
-		doc["io_watcher_active"] = (bool) watcher.active;
+	json::value inspectAsJson() const {
+		json::value doc = Channel::inspectAsJson();
+		json::object &odoc = doc.get_object();
+		odoc["initialized"] = watcher.fd != -1;
+		odoc["io_watcher_active"] = (bool) watcher.active;
 		return doc;
 	}
 };

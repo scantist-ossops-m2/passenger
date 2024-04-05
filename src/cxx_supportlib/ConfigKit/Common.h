@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <StaticString.h>
 
@@ -38,7 +38,7 @@ namespace Passenger {
 namespace ConfigKit {
 
 using namespace std;
-
+namespace json = boost::json;
 
 class Store;
 
@@ -123,8 +123,8 @@ public:
 	}
 };
 
-typedef boost::function<Json::Value (const Store &store)> ValueGetter;
-typedef boost::function<Json::Value (const Json::Value &value)> ValueFilter;
+typedef boost::function<json::value (const Store &store)> ValueGetter;
+typedef boost::function<json::value (const json::value &value)> ValueFilter;
 
 
 } // namespace ConfigKit

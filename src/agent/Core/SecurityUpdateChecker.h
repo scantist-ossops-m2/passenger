@@ -30,6 +30,7 @@
 #include <cassert>
 #include <boost/config.hpp>
 #include <boost/scoped_ptr.hpp>
+#include <boost/json.hpp>
 #include <oxt/thread.hpp>
 #include <oxt/backtrace.hpp>
 
@@ -40,6 +41,7 @@
 #include <ConfigKit/ConfigKit.h>
 #include <Utils/Curl.h>
 #include <modp_b64.h>
+#include <JsonTools/JsonUtils.h>
 
 #if BOOST_OS_MACOS
 	#include <sys/syslimits.h>
@@ -99,7 +101,7 @@ public:
 	class Schema: public ConfigKit::Schema {
 	private:
 		static void validateInterval(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
-			unsigned int interval = config["interval"].asUInt();
+			unsigned int interval = config["interval"].as_uint64();
 			if (interval < MIN_CHECK_BACKOFF_SEC || interval > MAX_CHECK_BACKOFF_SEC) {
 				errors.push_back(ConfigKit::Error("'{{interval}}' must be between " +
 					toString(MIN_CHECK_BACKOFF_SEC) + " and " + toString(MAX_CHECK_BACKOFF_SEC)));
@@ -107,16 +109,16 @@ public:
 		}
 
 		static void validateProxyUrl(const ConfigKit::Store &config, vector<ConfigKit::Error> &errors) {
-			if (config["proxy_url"].isNull()) {
+			if (config["proxy_url"].is_null()) {
 				return;
 			}
-			if (config["proxy_url"].asString().empty()) {
+			if (config["proxy_url"].get_string().empty()) {
 				errors.push_back(ConfigKit::Error("'{{proxy_url}}', if specified, may not be empty"));
 				return;
 			}
 
 			try {
-				prepareCurlProxy(config["proxy_url"].asString());
+				prepareCurlProxy(jsonValueToString(config["proxy_url"]));
 			} catch (const ArgumentException &e) {
 				errors.push_back(ConfigKit::Error(
 					P_STATIC_STRING("'{{proxy_url}}': ")
@@ -152,9 +154,9 @@ public:
 		string certificatePath;
 
 		ConfigRealization(const ConfigKit::Store &config)
-			: proxyInfo(prepareCurlProxy(config["proxy_url"].asString())),
-			  url(config["url"].asString()),
-			  certificatePath(config["certificate_path"].asString())
+			: proxyInfo(prepareCurlProxy(jsonValueToString(config["proxy_url"]))),
+			  url(jsonValueToString(config["url"])),
+			  certificatePath(jsonValueToString(config["certificate_path"]))
 			{ }
 
 		void swap(ConfigRealization &other) BOOST_NOEXCEPT_OR_NOTHROW {
@@ -214,7 +216,7 @@ private:
 			unsigned int checkIntervalSec;
 			{
 				boost::lock_guard<boost::mutex> l(configSyncher);
-				checkIntervalSec = config["interval"].asUInt();
+				checkIntervalSec = config["interval"].as_uint64();
 			}
 			long backoffSec = checkIntervalSec + (backoffMin * 60);
 			if (backoffSec < MIN_CHECK_BACKOFF_SEC) {
@@ -243,17 +245,17 @@ private:
 				break;
 
 			case CURLE_COULDNT_CONNECT:
-				if (sessionState.config["proxy_url"].isNull()) {
+				if (sessionState.config["proxy_url"].is_null()) {
 					error.append(" for " + sessionState.configRlz.url + " " POSSIBLE_MITM_RESOLUTION);
 				} else {
 					error.append(" for " + sessionState.configRlz.url + " using proxy "
-						+ sessionState.config["proxy_url"].asString() +
+						+ jsonValueToString(sessionState.config["proxy_url"]) +
 						" (if this error persists check your firewall and/or proxy settings)");
 				}
 				break;
 
 			case CURLE_COULDNT_RESOLVE_PROXY:
-				error.append(" for proxy address " + sessionState.config["proxy_url"].asString());
+				error.append(" for proxy address " + jsonValueToString(sessionState.config["proxy_url"]));
 				break;
 
 #if LIBCURL_VERSION_NUM < 0x073e00
@@ -271,9 +273,9 @@ private:
 
 			case CURLE_SSL_CACERT_BADFILE:
 				error.append(" while connecting to " + sessionState.configRlz.url + " ");
-				if (!sessionState.config["proxy_url"].isNull()) {
+				if (!sessionState.config["proxy_url"].is_null()) {
 					error.append("using proxy ");
-					error.append(sessionState.config["proxy_url"].asString());
+					error.append(jsonValueToString(sessionState.config["proxy_url"]));
 					error.append(" ");
 				}
 				error.append("; this might happen if the nss backend is installed for"
@@ -290,9 +292,9 @@ private:
 				// files, but we don't do that so fall through to default.
 			default:
 				error.append(" while connecting to " + sessionState.configRlz.url + " ");
-				if (!sessionState.config["proxy_url"].isNull()) {
+				if (!sessionState.config["proxy_url"].is_null()) {
 					error.append("using proxy ");
-					error.append(sessionState.config["proxy_url"].asString());
+					error.append(jsonValueToString(sessionState.config["proxy_url"]));
 					error.append(" ");
 				}
 				error.append(POSSIBLE_MITM_RESOLUTION);
@@ -451,7 +453,7 @@ public:
 	// Dependencies
 	ResourceLocator *resourceLocator;
 
-	SecurityUpdateChecker(const Schema &schema, const Json::Value &initialConfig,
+	SecurityUpdateChecker(const Schema &schema, const json::object &initialConfig,
 		const ConfigKit::Translator &translator = ConfigKit::DummyTranslator())
 		: config(schema, initialConfig, translator),
 		  configRlz(config),
@@ -501,7 +503,7 @@ public:
 		unsigned int checkIntervalSec;
 		{
 			boost::lock_guard<boost::mutex> l(configSyncher);
-			checkIntervalSec = config["interval"].asUInt();
+			checkIntervalSec = config["interval"].as_uint64();
 		}
 		P_ERROR("Security update check failed: " << error << " (next check in "
 			<< (checkIntervalSec / (60*60)) << " hours)");
@@ -558,13 +560,13 @@ public:
 		SessionState sessionState(config, configRlz);
 		l.unlock();
 
-		if (sessionState.config["disabled"].asBool()) {
+		if (sessionState.config["disabled"].as_bool()) {
 			P_INFO("Security update checking disabled; skipping check");
 			return backoffMin;
 		}
 
 		// 1. Assemble data to send
-		Json::Value bodyJson;
+		json::object bodyJson;
 
 		bodyJson["passenger_version"] = PASSENGER_VERSION;
 
@@ -608,7 +610,7 @@ public:
 				curl_easy_setopt(curl, CURLOPT_CAINFO, sessionState.configRlz.certificatePath.c_str());
 			}
 
-			string bodyJsonString = bodyJson.toStyledString();
+			string bodyJsonString = json::serialize(bodyJson);
 			if (CURLE_OK != (code = prepareCurlPOST(curl, sessionState, bodyJsonString,
 				&responseData, &chunk)))
 			{
@@ -627,23 +629,23 @@ public:
 				logUpdateFailHttp(sessionState, (int) responseCode);
 				break;
 			}
-
-			Json::Reader reader;
-			Json::Value responseJson;
-			if (!reader.parse(responseData, responseJson, false)) {
+			error_code ec;
+			json::value responseJson = json::parse(responseData, ec);
+			if (ec) {
 				logUpdateFailResponse("json parse", responseData);
 				break;
 			}
 			P_DEBUG("received: " << responseData);
 
 			// 3b. Verify response: signature
-			if (!responseJson.isObject() || !responseJson["data"].isString() || !responseJson["signature"].isString()) {
+			json::object &robj = responseJson.get_object();
+			if (!responseJson.is_object() || !robj["data"].is_string() || !robj["signature"].is_string()) {
 				logUpdateFailResponse("missing response fields", responseData);
 				break;
 			}
 
-			string signature64 = responseJson["signature"].asString();
-			string data64 = responseJson["data"].asString();
+			string signature64 = getJsonStringField(robj,"signature");
+			string data64 = getJsonStringField(robj,"data");
 
 			signatureChars = (char *)malloc(modp_b64_decode_len(signature64.length()));
 			dataChars = (char *)malloc(modp_b64_decode_len(data64.length()) + 1);
@@ -672,31 +674,32 @@ public:
 			}
 			dataChars[dataLen] = '\0';
 
-			Json::Value responseDataJson;
-			if (!reader.parse(dataChars, responseDataJson, false)) {
-				logUpdateFailResponse("unparseable data", dataChars);
+			ec.clear();
+			json::value responseDataJson=json::parse(dataChars, ec);
+			if (ec) {
+				logUpdateFailResponse("unparseable data", responseData);
 				break;
 			}
-			P_DEBUG("data content (signature OK): " << responseDataJson.toStyledString());
-
-			if (!responseDataJson.isObject() || !responseDataJson["update"].isInt() || !responseDataJson["nonce"].isString()) {
+			P_DEBUG("data content (signature OK): " << json::serialize(responseDataJson));
+			robj = responseDataJson.get_object();
+			if (!responseDataJson.is_object() || !robj["update"].is_int64() || !robj["nonce"].is_string()) {
 				logUpdateFailResponse("missing data fields", responseData);
 				break;
 			}
 
-			if (nonce != responseDataJson["nonce"].asString()) {
+			if (nonce != robj["nonce"].as_string()) {
 				logUpdateFailResponse("nonce mismatch, possible replay attack", responseData);
 				break;
 			}
 
 			// 4. The main point: is there an update, and when is the next check?
-			int update = responseDataJson["update"].asInt();
+			int update = robj["update"].as_int64();
 
-			if (responseDataJson["backoff"].isInt()) {
-				backoffMin = responseDataJson["backoff"].asInt();
+			if (robj["backoff"].is_int64()) {
+				backoffMin = robj["backoff"].as_int64();
 			}
 
-			if (update == 1 && !responseDataJson["version"].isString()) {
+			if (update == 1 && !robj["version"].is_string()) {
 				logUpdateFailResponse("update available, but version field missing", responseData);
 				break;
 			}
@@ -705,21 +708,21 @@ public:
 				unsigned int checkIntervalSec;
 				{
 					boost::lock_guard<boost::mutex> l(configSyncher);
-					checkIntervalSec = config["interval"].asUInt();
+					checkIntervalSec = config["interval"].as_uint64();
 				}
 				logUpdateSuccess(update, "Security update check: no update found (next check in "
 					+ toString(checkIntervalSec / (60*60)) + " hours)");
 			} else {
 				logUpdateSuccess(update, "A security update is available for your version (" PASSENGER_VERSION
 					") of " PROGRAM_NAME ". We strongly recommend upgrading to version " +
-					responseDataJson["version"].asString() + ".");
+								 getJsonStringField(robj,"version") + ".");
 			}
 
 			// 5. Shown independently of whether there is an update so that the server can provide general warnings
 			// (e.g. about server-side detected MITM attack)
-			if (responseDataJson["log"].isString()) {
-				string additional = responseDataJson["log"].asString();
-				if (additional.length() > 0) {
+			if (robj["log"].is_string()) {
+				json::string additional = robj["log"].as_string();
+				if (additional.size() > 0) {
 					logUpdateSuccessAdditional("Additional security update check information: " + additional);
 				}
 			}
@@ -742,7 +745,7 @@ public:
 		return backoffMin;
 	}
 
-	bool prepareConfigChange(const Json::Value &updates,
+	bool prepareConfigChange(const json::object &updates,
 		vector<ConfigKit::Error> &errors, ConfigChangeRequest &req)
 	{
 		{
@@ -761,7 +764,7 @@ public:
 		configRlz.swap(*req.configRlz);
 	}
 
-	Json::Value inspectConfig() const {
+	json::value inspectConfig() const {
 		boost::lock_guard<boost::mutex> l(configSyncher);
 		return config.inspect();
 	}

@@ -49,6 +49,7 @@
  * in the various API servers.
  */
 
+#include <boost/json.hpp>
 #include <boost/foreach.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/regex.hpp>
@@ -61,7 +62,6 @@
 #include <stdexcept>
 #include <cstddef>
 #include <cstring>
-#include <jsoncpp/json.h>
 #include <modp_b64.h>
 #include <StaticString.h>
 #include <Exceptions.h>
@@ -591,16 +591,16 @@ apiServerProcessPing(Server *server, Client *client, Request *req) {
 template<typename Server, typename Client, typename Request>
 inline void
 apiServerProcessInfo(Server *server, Client *client, Request *req,
-	const boost::function<void (Json::Value &response)> &postprocessResponse =
-		boost::function<void (Json::Value &)>())
+	const boost::function<void (json::object &response)> &postprocessResponse =
+		boost::function<void (json::object &)>())
 {
 	Authorization auth(authorize(server, client, req));
 	if (auth.canReadPool || auth.canInspectState) {
 		ServerKit::HeaderTable headers;
 		headers.insert(req->pool, "Content-Type", "application/json");
 
-		Json::Value response;
-		response["pid"] = (Json::UInt64) getpid();
+		json::object response;
+		response["pid"] = (uint64_t) getpid();
 		response["program_name"] = PROGRAM_NAME;
 		response["program_version"] = PASSENGER_VERSION;
 		response["api_version"] = PASSENGER_API_VERSION;
@@ -615,7 +615,7 @@ apiServerProcessInfo(Server *server, Client *client, Request *req,
 		}
 
 		server->writeSimpleResponse(client, 200, &headers,
-			response.toStyledString());
+									json::serialize(response));
 		if (!req->ended()) {
 			server->endRequest(&client, &req);
 		}
@@ -668,7 +668,8 @@ apiServerProcessReopenLogs(Server *server, Client *client, Request *req) {
 		headers.insert(req->pool, "Content-Type", "application/json");
 
 		ConfigKit::Store config = LoggingKit::context->getConfig();
-		if (!config["target"].isMember("path")) {
+		json::object &&config_target = config["target"].get_object();
+		if (!config_target.contains("path")) {
 			server->writeSimpleResponse(client, 500, &headers, "{ \"status\": \"error\", "
 				"\"code\": \"NO_LOG_FILE\", "
 				"\"message\": \"" PROGRAM_NAME " was not configured with a log file.\" }\n");
@@ -685,8 +686,8 @@ apiServerProcessReopenLogs(Server *server, Client *client, Request *req) {
 			// We deliberately ignore the target.stderr key.
 			// If the log file was equal to stderr then we'll want
 			// to reopen the log file anyway.
-			Json::Value updates;
-			updates["target"] = config["target"]["path"];
+			json::object updates;
+			updates["target"] = config_target["path"];
 			ok = LoggingKit::context->prepareConfigChange(updates,
 				errors, configReq);
 		} catch (const SystemException &e) {
@@ -763,14 +764,15 @@ _apiServerProcessReinheritLogsResponseBody(
 	P_LOG_FILE_DESCRIPTOR_PURPOSE(fd, "Reinherited log file handle");
 
 	ConfigKit::Store oldConfig = LoggingKit::context->getConfig();
-	Json::Value config;
+	json::object config;
 	vector<ConfigKit::Error> errors;
 	LoggingKit::ConfigChangeRequest configReq;
 	bool ok;
 
 	config["target"] = oldConfig["target"];
-	config["target"]["fd"] = fd;
-	config["target"].removeMember("stderr");
+	json::object& config_target = config["target"].get_object();
+	config_target["fd"] = fd;
+	config_target.erase("stderr");
 	try {
 		ok = LoggingKit::context->prepareConfigChange(config,
 			errors, configReq);

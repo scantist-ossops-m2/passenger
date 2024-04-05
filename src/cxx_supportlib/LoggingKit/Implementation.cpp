@@ -40,6 +40,7 @@
 #include <time.h>
 #include <pthread.h>
 
+#include <boost/json.hpp>
 #include <boost/cstdint.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/foreach.hpp>
@@ -57,6 +58,7 @@
 #include <FileTools/PathManip.h>
 #include <Utils.h>
 #include <StrIntTools/StrIntUtils.h>
+#include <JsonTools/JsonUtils.h>
 #include <SystemTools/SystemTime.h>
 
 namespace Passenger {
@@ -71,7 +73,7 @@ Context *context = NULL;
 AssertionFailureInfo lastAssertionFailure;
 
 void
-initialize(const Json::Value &initialConfig, const ConfigKit::Translator &translator) {
+initialize(const json::value &initialConfig, const ConfigKit::Translator &translator) {
 	context = new Context(initialConfig, translator);
 }
 
@@ -91,7 +93,7 @@ Level getLevel() {
 
 void
 setLevel(Level level) {
-	Json::Value config;
+	json::object config;
 	vector<ConfigKit::Error> errors;
 	ConfigChangeRequest req;
 
@@ -362,35 +364,36 @@ Context::saveMonitoredFileLog(const HashedStaticString &groupName,
 	//unlock
 }
 
-Json::Value
+json::value
 Context::convertLog(){
 	boost::lock_guard<boost::mutex> l(syncher); //lock
-	Json::Value reply = Json::objectValue;
+	json::object reply;
 
 	if (!logStore.empty()) {
 		Context::LogStore::ConstIterator appGroupIter(logStore);
 		while (*appGroupIter != NULL) {
-			reply[appGroupIter.getKey()] = Json::objectValue;
+			reply[appGroupIter.getKey()] = json::object();
 
-			Json::Value &processLog = reply[appGroupIter.getKey()]["Application process log (combined)"];
-			if (processLog.isNull()) {
-				processLog = Json::arrayValue;
+			json::value &processLog = reply[appGroupIter.getKey()].at("Application process log (combined)");
+			if (processLog.is_null()) {
+				processLog.emplace_array();
 			}
 			foreach (TimestampedLog logLine, appGroupIter->value.pidLog) {
-				Json::Value logLineJson = Json::objectValue;
+				json::object logLineJson;
 				logLineJson["source_id"] = logLine.sourceId;
-				logLineJson["timestamp"] = (Json::UInt64) logLine.timestamp;
+				logLineJson["timestamp"] = (uint64_t) logLine.timestamp;
 				logLineJson["line"] = logLine.lineText;
-				processLog.append(logLineJson);
+				processLog.get_array().push_back(logLineJson);
 			}
 
 			Context::SimpleLogMap::ConstIterator watchFileLogIter(appGroupIter->value.watchFileLog);
 			while (*watchFileLogIter != NULL) {
-				if (!reply[appGroupIter.getKey()].isMember(watchFileLogIter.getKey())){
-					reply[appGroupIter.getKey()][watchFileLogIter.getKey()] = Json::arrayValue;
+				json::object &appGroup = reply[appGroupIter.getKey()].get_object();
+				if (!appGroup.contains(watchFileLogIter.getKey())) {
+					appGroup[watchFileLogIter.getKey()] = json::array();
 				}
 				foreach (string line, watchFileLogIter->value) {
-					reply[appGroupIter.getKey()][watchFileLogIter.getKey()].append(line);
+					appGroup[watchFileLogIter.getKey()].get_array().push_back(json::string(line));
 				}
 				watchFileLogIter.next();
 			}
@@ -493,40 +496,44 @@ logAppOutput(const HashedStaticString &groupName, pid_t pid, const StaticString 
 }
 
 
-static Json::Value
-normalizeConfig(const Json::Value &effectiveValues) {
-	Json::Value updates(Json::objectValue);
+static json::object
+normalizeConfig(const json::object &effectiveValues) {
+	json::object updates;
 
 	updates["level"] = levelToString(parseLevel(
-		effectiveValues["level"].asString())).toString();
+		getJsonStringField(effectiveValues,"level"))).toString();
 	updates["app_output_log_level"] = levelToString(parseLevel(
-		effectiveValues["app_output_log_level"].asString())).toString();
+		getJsonStringField(effectiveValues,"app_output_log_level"))).toString();
 
-	if (effectiveValues["target"].isString()) {
-		updates["target"]["path"] = absolutizePath(effectiveValues["target"].asString());
-	} else if (!effectiveValues["target"]["path"].isNull()) {
-		updates["target"] = effectiveValues["target"];
-		updates["target"]["path"] = absolutizePath(effectiveValues["target"]["path"].asString());
+	const json::value &effectiveTarget = effectiveValues.at("target");
+	if (effectiveTarget.is_string()) {
+		updates["target"] = json::object();
+		updates["target"].at("path") = absolutizePath(effectiveTarget.as_string());
+	} else if (!effectiveValues.at("target").at("path").is_null()) {
+		updates["target"] = effectiveTarget;
+		updates["target"].at("path") = absolutizePath(getJsonStaticStringField(effectiveTarget,"path"));
 	}
 
-	if (effectiveValues["file_descriptor_log_target"].isString()) {
-		updates["file_descriptor_log_target"]["path"] =
-			absolutizePath(effectiveValues["file_descriptor_log_target"].asString());
-	} else if (effectiveValues["file_descriptor_log_target"].isObject()
-		&& !effectiveValues["file_descriptor_log_target"]["path"].isNull())
+	const json::value &effectiveLogTarget= effectiveValues.at("file_descriptor_log_target");
+	if (effectiveLogTarget.is_string()) {
+		updates["file_descriptor_log_target"] = json::object();
+		updates["file_descriptor_log_target"].at("path") =
+			absolutizePath(effectiveLogTarget.as_string());
+	} else if (effectiveLogTarget.is_object()
+			   && !effectiveLogTarget.at("path").is_null())
 	{
-		updates["file_descriptor_log_target"] = effectiveValues["file_descriptor_log_target"];
-		updates["file_descriptor_log_target"]["path"] =
-			absolutizePath(effectiveValues["file_descriptor_log_target"]["path"].asString());
+		updates["file_descriptor_log_target"] = effectiveLogTarget;
+		updates["file_descriptor_log_target"].at("path") =
+			absolutizePath(getJsonStaticStringField(effectiveLogTarget,"path"));
 	}
 
 	return updates;
 }
 
 
-Context::Context(const Json::Value &initialConfig,
+Context::Context(const json::value &initialConfig,
 	const ConfigKit::Translator &translator)
-	: config(schema, initialConfig, translator),
+	: config(schema, initialConfig.get_object(), translator),
 	  gcThread(NULL),
 	  shuttingDown(false)
 {
@@ -559,12 +566,12 @@ Context::getConfig() const {
 }
 
 bool
-Context::prepareConfigChange(const Json::Value &updates,
+Context::prepareConfigChange(const json::value &updates,
 	vector<ConfigKit::Error> &errors, LoggingKit::ConfigChangeRequest &req)
 {
 	{
 		boost::lock_guard<boost::mutex> l(syncher);
-		req.config.reset(new ConfigKit::Store(config, updates, errors));
+		req.config.reset(new ConfigKit::Store(config, updates.get_object(), errors));
 	}
 	if (!errors.empty()) {
 		return false;
@@ -590,7 +597,7 @@ Context::commitConfigChange(LoggingKit::ConfigChangeRequest &req) BOOST_NOEXCEPT
 	newConfigRlz->finalize();
 }
 
-Json::Value
+json::value
 Context::inspectConfig() const {
 	boost::lock_guard<boost::mutex> l(syncher);
 	return config.inspect();
@@ -673,9 +680,9 @@ Context::killGcThread() {
 	gcHasShutDownCond.notify_one();
 }
 
-Json::Value
+json::value
 Schema::createStderrTarget() {
-	Json::Value doc;
+	json::object doc;
 	doc["stderr"] = true;
 	return doc;
 }
@@ -685,7 +692,7 @@ Schema::validateLogLevel(const string &key, const ConfigKit::Store &store,
 	vector<ConfigKit::Error> &errors)
 {
 	typedef ConfigKit::Error Error;
-	Level level = parseLevel(store[key].asString());
+	Level level = parseLevel(store[key].as_string());
 	if (level == UNKNOWN_LEVEL) {
 		errors.push_back(Error("'{{" + key + "}}' must be one of"
 			" 'crit', 'error', 'warn', 'notice', 'info', 'debug', 'debug2' or 'debug3'"));
@@ -697,10 +704,10 @@ Schema::validateTarget(const string &key, const ConfigKit::Store &store,
 	vector<ConfigKit::Error> &errors)
 {
 	typedef ConfigKit::Error Error;
-	Json::Value value = store[key];
+	json::value value = store[key];
 	string keyQuote = "'{{" + key + "}}'";
 
-	if (value.isNull()) {
+	if (value.is_null()) {
 		return;
 	}
 
@@ -711,9 +718,10 @@ Schema::validateTarget(const string &key, const ConfigKit::Store &store,
 	// { "path": "/path", "fd": 123 }
 	// { "path": "/path", "stderr": true }
 
-	if (value.isObject()) {
-		if (value.isMember("stderr")) {
-			if (!value["stderr"].isBool() || !value["stderr"].asBool()) {
+	if (value.is_object()) {
+		json::object &ovalue = value.get_object();
+		if (ovalue.contains("stderr")) {
+			if (!ovalue["stderr"].is_bool() || !ovalue["stderr"].as_bool()) {
 				errors.push_back(Error("When " + keyQuote
 					+ " is an object containing the 'stderr' key,"
 					" it must have the 'true' value"));
@@ -721,34 +729,34 @@ Schema::validateTarget(const string &key, const ConfigKit::Store &store,
 			}
 		}
 
-		if (value.isMember("path")) {
-			if (!value["path"].isString()) {
+		if (ovalue.contains("path")) {
+			if (!ovalue["path"].is_string()) {
 				errors.push_back(Error("When " + keyQuote
 					+ " is an object containing the 'path' key,"
 					" it must be a string"));
 			}
-			if (value.isMember("fd")) {
-				if (!value["fd"].isInt()) {
+			if (ovalue.contains("fd")) {
+				if (!ovalue["fd"].is_int64()) {
 					errors.push_back(Error("When " + keyQuote
 						+ " is an object containing the 'fd' key,"
 						" it must be an integer"));
-				} else if (value["fd"].asInt() < 0) {
+				} else if (ovalue["fd"].as_int64() < 0) {
 					errors.push_back(Error("When " + keyQuote
 						+ " is an object containing the 'fd' key,"
 						" it must be 0 or greater"));
 				}
 			}
-			if (value.isMember("fd") && value.isMember("stderr")) {
+			if (ovalue.contains("fd") && ovalue.contains("stderr")) {
 				errors.push_back(Error(keyQuote
 					+ " may contain either the 'fd' or the"
 					" 'stderr' key, but not both"));
 			}
-		} else if (value.isMember("stderr")) {
-			if (value.size() > 1) {
+		} else if (ovalue.contains("stderr")) {
+			if (ovalue.size() > 1) {
 				errors.push_back(Error("When " + keyQuote
 					+ " is an object containing the 'stderr' key,"
 					" it may not contain any other keys"));
-			} else if (!value["stderr"].asBool()) {
+			} else if (!ovalue["stderr"].as_bool()) {
 				errors.push_back(Error("When " + keyQuote
 					+ " is an object containing the 'stderr' key,"
 					" it must have the 'true' value"));
@@ -758,16 +766,16 @@ Schema::validateTarget(const string &key, const ConfigKit::Store &store,
 				+ " is an object, it must contain either"
 				" the 'stderr' or 'path' key"));
 		}
-	} else if (!value.isString()) {
+	} else if (!value.is_string()) {
 		errors.push_back(Error(keyQuote
 			+ " must be either a string or an object"));
 	}
 }
 
-static Json::Value
-filterTargetFd(const Json::Value &value) {
-	Json::Value result = value;
-	result.removeMember("fd");
+static json::value
+filterTargetFd(const json::value &value) {
+	json::object result = value.get_object();
+	result.erase("fd");
 	return result;
 }
 
@@ -800,70 +808,62 @@ Schema::Schema() {
 
 
 ConfigRealization::ConfigRealization(const ConfigKit::Store &store)
-	: level(parseLevel(store["level"].asString())),
-	  appOutputLogLevel(parseLevel(store["app_output_log_level"].asString())),
-	  saveLog(store["buffer_logs"].asBool()),
+	: level(parseLevel(store["level"].as_string())),
+	  appOutputLogLevel(parseLevel(store["app_output_log_level"].as_string())),
+	  saveLog(store["buffer_logs"].as_bool()),
 	  finalized(false),
-	  disableLogPrefix(store["disable_log_prefix"].asBool())
+	  disableLogPrefix(store["disable_log_prefix"].as_bool())
 {
-	if (store["target"].isMember("stderr")) {
+	const json::object &storeTarget = store["target"].get_object();
+	if (storeTarget.contains("stderr")) {
 		targetType = STDERR_TARGET;
 		targetFd = STDERR_FILENO;
 		targetFdClosePolicy = NEVER_CLOSE;
-	} else if (store["target"]["fd"].isNull()) {
-		string path = store["target"]["path"].asString();
+	} else if (!storeTarget.contains("fd") || storeTarget.at("fd").is_null()) {
+		string path = getJsonStringField(storeTarget,"path");
 		targetType = FILE_TARGET;
-		if (store["target"]["stderr"].asBool()) {
-			targetFd = STDERR_FILENO;
-			targetFdClosePolicy = NEVER_CLOSE;
-		} else {
-			targetFd = syscalls::open(path.c_str(),
-				O_WRONLY | O_APPEND | O_CREAT, 0644);
-			if (targetFd == -1) {
-				int e = errno;
-				throw FileSystemException(
-					"Cannot open " + path + " for writing",
-					e, path);
-			}
-			targetFdClosePolicy = ALWAYS_CLOSE;
+		targetFd = syscalls::open(path.c_str(),
+			O_WRONLY | O_APPEND | O_CREAT, 0644);
+		if (targetFd == -1) {
+			int e = errno;
+			throw FileSystemException(
+				"Cannot open " + path + " for writing",
+				e, path);
 		}
+		targetFdClosePolicy = ALWAYS_CLOSE;
 	} else {
 		targetType = FILE_TARGET;
-		targetFd = store["target"]["fd"].asInt();
+		targetFd = getJsonIntField(storeTarget,"fd");
 		// If anything goes wrong before finalization, then
 		// the caller is responsible for cleaning up the fd.
 		// See the Context class description.
 		targetFdClosePolicy = CLOSE_WHEN_FINALIZED;
 	}
 
-	if (store["file_descriptor_log_target"].isNull()) {
+	const json::object &storeLogTarget = store["file_descriptor_log_target"].get_object();
+	if (store["file_descriptor_log_target"].is_null()) {
 		fileDescriptorLogTargetType = NO_TARGET;
 		fileDescriptorLogTargetFd = -1;
 		fileDescriptorLogTargetFdClosePolicy = NEVER_CLOSE;
-	} else if (store["file_descriptor_log_target"].isMember("stderr")) {
+	} else if (storeLogTarget.contains("stderr")) {
 		fileDescriptorLogTargetType = STDERR_TARGET;
 		fileDescriptorLogTargetFd = STDERR_FILENO;
 		fileDescriptorLogTargetFdClosePolicy = NEVER_CLOSE;
-	} else if (store["file_descriptor_log_target"]["fd"].isNull()) {
-		string path = store["file_descriptor_log_target"]["path"].asString();
+	} else if (!storeLogTarget.contains("fd") || storeLogTarget.at("fd").is_null()) {
+		string path = getJsonStringField(storeLogTarget,"path");
 		fileDescriptorLogTargetType = FILE_TARGET;
-		if (store["file_descriptor_log_target"]["stderr"].asBool()) {
-			fileDescriptorLogTargetFd = STDERR_FILENO;
-			fileDescriptorLogTargetFdClosePolicy = NEVER_CLOSE;
-		} else {
-			fileDescriptorLogTargetFd = syscalls::open(path.c_str(),
-				O_WRONLY | O_APPEND | O_CREAT, 0644);
-			if (fileDescriptorLogTargetFd == -1) {
-				int e = errno;
-				throw FileSystemException(
-					"Cannot open " + path + " for writing",
-					e, path);
-			}
-			fileDescriptorLogTargetFdClosePolicy = ALWAYS_CLOSE;
+		fileDescriptorLogTargetFd = syscalls::open(path.c_str(),
+			O_WRONLY | O_APPEND | O_CREAT, 0644);
+		if (fileDescriptorLogTargetFd == -1) {
+			int e = errno;
+			throw FileSystemException(
+				"Cannot open " + path + " for writing",
+				e, path);
 		}
+		fileDescriptorLogTargetFdClosePolicy = ALWAYS_CLOSE;
 	} else {
 		fileDescriptorLogTargetType = FILE_TARGET;
-		fileDescriptorLogTargetFd = store["file_descriptor_log_target"]["fd"].asInt();
+		fileDescriptorLogTargetFd = getJsonIntField(storeLogTarget,"fd");
 		// If anything goes wrong before finalization, then
 		// the caller is responsible for cleaning up the fd.
 		// See the Context class description.
@@ -905,7 +905,7 @@ void
 ConfigRealization::apply(const ConfigKit::Store &config, ConfigRealization *oldConfigRlz)
 	BOOST_NOEXCEPT_OR_NOTHROW
 {
-	if (config["redirect_stderr"].asBool()) {
+	if (config["redirect_stderr"].as_bool()) {
 		int ret = syscalls::dup2(targetFd, STDERR_FILENO);
 		if (ret == -1) {
 			int e = errno;

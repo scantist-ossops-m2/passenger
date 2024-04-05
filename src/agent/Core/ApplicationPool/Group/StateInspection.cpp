@@ -23,7 +23,9 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  *  THE SOFTWARE.
  */
+#include <boost/json.hpp>
 #include <Core/ApplicationPool/Group.h>
+#include <Core/ApplicationPool/Pool.h>
 #include <FileTools/PathManip.h>
 #include <cassert>
 #include <modp_b64.h>
@@ -200,7 +202,7 @@ Group::inspectXml(std::ostream &stream, bool includeSecrets) const {
 }
 
 void
-Group::inspectPropertiesInAdminPanelFormat(Json::Value &result) const {
+Group::inspectPropertiesInAdminPanelFormat(json::object &result) const {
 	result["path"] = absolutizePath(options.appRoot);
 	result["startup_file"] = absolutizePath(options.getStartupFile(getWrapperRegistry()),
 		absolutizePath(options.appRoot));
@@ -210,16 +212,20 @@ Group::inspectPropertiesInAdminPanelFormat(Json::Value &result) const {
 
 	SpawningKit::UserSwitchingInfo usInfo(SpawningKit::prepareUserSwitching(options,
 		getWrapperRegistry()));
-	result["user"]["username"] = usInfo.username;
-	result["user"]["uid"] = (Json::Int) usInfo.uid;
-	result["group"]["groupname"] = usInfo.groupname;
-	result["group"]["gid"] = (Json::Int) usInfo.gid;
+	if (!result.contains("user")) { result["user"] = json::object(); }
+	json::object &user = result["user"].get_object();
+	user["username"] = usInfo.username;
+	user["uid"] = (int64_t) usInfo.uid;
+	if (!result.contains("group")) { result["group"]= json::object(); }
+	json::object &group = result["group"].get_object();
+	group["groupname"] = usInfo.groupname;
+	group["gid"] = (int64_t) usInfo.gid;
 
 	/******************/
 }
 
 void
-Group::inspectConfigInAdminPanelFormat(Json::Value &result) const {
+Group::inspectConfigInAdminPanelFormat(json::object &result) const {
 	#define VAL Pool::makeSingleValueJsonConfigFormat
 	#define SVAL Pool::makeSingleStrValueJsonConfigFormat
 	#define NON_EMPTY_SVAL Pool::makeSingleNonEmptyStrValueJsonConfigFormat
@@ -245,10 +251,10 @@ Group::inspectConfigInAdminPanelFormat(Json::Value &result) const {
 	result["spawn_method"] = SVAL(options.spawnMethod, DEFAULT_SPAWN_METHOD);
 	result["bind_address"] = SVAL(options.bindAddress, DEFAULT_BIND_ADDRESS);
 	result["start_timeout"] = VAL(options.startTimeout / 1000.0, DEFAULT_START_TIMEOUT / 1000.0);
-	result["max_preloader_idle_time"] = VAL((Json::UInt) options.maxPreloaderIdleTime,
-		(Json::UInt) DEFAULT_MAX_PRELOADER_IDLE_TIME);
+	result["max_preloader_idle_time"] = VAL((uint64_t) options.maxPreloaderIdleTime,
+		(uint64_t) DEFAULT_MAX_PRELOADER_IDLE_TIME);
 	result["max_out_of_band_work_instances"] = VAL(options.maxOutOfBandWorkInstances,
-		(Json::UInt) 1);
+		(uint64_t) 1);
 	result["base_uri"] = SVAL(options.baseURI, P_STATIC_STRING("/"));
 	result["user"] = SVAL(options.user, options.defaultUser);
 	result["group"] = SVAL(options.group, options.defaultGroup);
@@ -257,8 +263,8 @@ Group::inspectConfigInAdminPanelFormat(Json::Value &result) const {
 	result["load_shell_envvars"] = VAL(options.loadShellEnvvars); // TODO: default value depends on integration mode
 	result["preload_bundler"] = VAL(options.preloadBundler);
 	result["max_request_queue_size"] = VAL(options.maxRequestQueueSize,
-		(Json::UInt) DEFAULT_MAX_REQUEST_QUEUE_SIZE);
-	result["max_requests"] = VAL((Json::UInt) options.maxRequests, 0u);
+		(uint64_t) DEFAULT_MAX_REQUEST_QUEUE_SIZE);
+	result["max_requests"] = VAL((uint64_t) options.maxRequests, 0u);
 	result["abort_websockets_on_process_shutdown"] = VAL(options.abortWebsocketsOnProcessShutdown);
 	result["force_max_concurrent_requests_per_process"] = VAL(options.forceMaxConcurrentRequestsPerProcess, -1);
 	result["restart_dir"] = NON_EMPTY_SVAL(options.restartDir);
@@ -271,7 +277,7 @@ Group::inspectConfigInAdminPanelFormat(Json::Value &result) const {
 		if (envvarsDataSize == (size_t) -1) {
 			P_WARN("Unable to decode environment variable data");
 		} else {
-			Json::Value envvars(Json::objectValue);
+			json::object envvars;
 			vector<string> envvarsAry;
 			unsigned int i;
 
@@ -285,10 +291,10 @@ Group::inspectConfigInAdminPanelFormat(Json::Value &result) const {
 				envvars[envvarsAry[i]] = envvarsAry[i + 1];
 			}
 
-			result["environment_variables"] = VAL(envvars, Json::objectValue);
+			result["environment_variables"] = VAL(envvars, json::object());
 		}
 	} else {
-		result["environment_variables"] = VAL(Json::objectValue, Json::objectValue);
+		result["environment_variables"] = VAL(json::object(), json::object());
 	}
 
 	// Missing: sticky_sessions, sticky_session_cookie_name, friendly_error_pages

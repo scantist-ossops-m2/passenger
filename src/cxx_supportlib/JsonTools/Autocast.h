@@ -27,7 +27,7 @@
 #define _PASSENGER_JSON_TOOLS_AUTOCAST_H_
 
 #include <boost/regex.hpp>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 #include <cstdlib>
 #include <string>
@@ -38,7 +38,7 @@ namespace Passenger {
 using namespace std;
 
 
-inline Json::Value
+inline json::value
 autocastValueToJson(const StaticString &value) {
 	static const boost::regex intRegex("\\A-?[0-9]+\\z");
 	static const boost::regex realRegex("\\A-?[0-9]+(\\.[0-9]+)?([eE][+\\-]?[0-9]+)?\\z");
@@ -52,24 +52,24 @@ autocastValueToJson(const StaticString &value) {
 
 	if (boost::regex_match(valueData, valueEnd, results, intRegex)) {
 		#if __cplusplus >= 201103
-			return (Json::Int64) atoll(value.toString().c_str());
+			return (int64_t) atoll(value.toString().c_str());
 		#else
-			return (Json::Int64) atol(value.toString().c_str());
+			return (int64_t) atol(value.toString().c_str());
 		#endif
 	} else if (boost::regex_match(valueData, valueEnd, results, realRegex)) {
 		return atof(value.toString().c_str());
 	} else if (boost::regex_match(valueData, valueEnd, results, boolRegex)) {
 		return boost::regex_match(valueData, valueEnd, results, trueRegex);
 	} else if (value.size() > 0 && (valueData[0] == '{' || valueData[0] == '[')) {
-		Json::Reader reader;
-		Json::Value jValue;
-		if (reader.parse(value, jValue)) {
+		error_code ec;
+		json::value jValue = json::parse(value, ec);
+		if (!ec) {
 			return jValue;
 		} else {
-			return Json::Value(valueData, valueEnd);
+			throw ec;
 		}
 	} else {
-		return Json::Value(valueData, valueEnd);
+		return json::string(value);
 	}
 }
 

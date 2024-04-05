@@ -37,8 +37,10 @@
 #include <Exceptions.h>
 #include <StaticString.h>
 #include <FileTools/PathManip.h>
+#include <FileTools/FileManip.h>
 #include <Utils.h>
 #include <StrIntTools/StrIntUtils.h>
+#include <JsonTools/JsonUtils.h>
 
 namespace Passenger {
 namespace ApiAccountUtils { // Avoid conflict with classes of the same name in ApiServerUtils.h, until we've migrated everything
@@ -100,7 +102,7 @@ using namespace std;
  */
 
 
-inline Json::Value parseApiAccountDescription(const StaticString &description);
+inline json::value parseApiAccountDescription(const StaticString &description);
 
 
 /**
@@ -114,45 +116,46 @@ validateAuthorizationsField(const string &key, const ConfigKit::Store &config,
 {
 	typedef ConfigKit::Error Error;
 
-	if (config[key].isNull()) {
+	if (config[key].is_null()) {
 		return;
 	}
 
-	const Json::Value authorizations = config[key];
-	Json::Value::const_iterator it, end = authorizations.end();
+	const json::array &authorizations = config[key].get_array();
+	json::array::const_iterator it, end = authorizations.end();
 	vector<ConfigKit::Error> errors;
 
 	for (it = authorizations.begin(); it != end; it++) {
-		const Json::Value &auth = *it;
+		const json::value &vauth = *it;
 
-		if (auth.isString()) {
+		if (vauth.is_string()) {
 			try {
-				parseApiAccountDescription(auth.asString());
+				parseApiAccountDescription(vauth.as_string());
 			} catch (const ArgumentException &e) {
 				errors.push_back(Error("'{{" + key + "}}' contains an invalid authorization description ("
-					+ auth.asString() + "): " + e.what()));
+					+ vauth.as_string() + "): " + e.what()));
 			}
-		} else if (auth.isObject()) {
-			if (auth.isMember("username")) {
-				if (!auth["username"].isString()) {
+		} else if (vauth.is_object()) {
+			const json::object &auth = it->get_object();
+			if (auth.contains("username")) {
+				if (!auth.at("username").is_string()) {
 					errors.push_back(Error("All usernames in '{{" + key + "}}' must be strings"));
-				} else if (auth["username"].asString() == "api") {
+				} else if (auth.at("username").as_string() == "api") {
 					errors.push_back(Error("'{{" + key + "}}' may not contain an 'api' username"));
 				}
 			} else {
 				errors.push_back(Error("All objects in '{{" + key + "}}' must contain the 'username' key"));
 			}
 
-			if (auth.isMember("password")) {
-				if (!auth["password"].isString()) {
+			if (auth.contains("password")) {
+				if (!auth.at("password").is_string()) {
 					errors.push_back(Error("All passwords in '{{" + key + "}}' must be strings"));
 				}
-				if (auth.isMember("password_file")) {
+				if (auth.contains("password_file")) {
 					errors.push_back(Error("Entries in '{{" + key + "}}' must contain either the"
 						" 'password' or the 'password_file' field, but not both"));
 				}
-			} else if (auth.isMember("password_file")) {
-				if (!auth["password_file"].isString()) {
+			} else if (auth.contains("password_file")) {
+				if (!auth.at("password_file").is_string()) {
 					errors.push_back(Error("All 'password_file' fields in '{{" + key + "}}' must be strings"));
 				}
 			} else {
@@ -160,10 +163,10 @@ validateAuthorizationsField(const string &key, const ConfigKit::Store &config,
 					" 'password' or 'password_file' key"));
 			}
 
-			if (auth.isMember("level")) {
-				if (!auth["level"].isString() || (
-					auth["level"].asString() != "readonly"
-					&& auth["level"].asString() != "full"))
+			if (auth.contains("level")) {
+				if (!auth.at("level").is_string() || (
+					auth.at("level").as_string() != "readonly"
+					&& auth.at("level").as_string() != "full"))
 				{
 					errors.push_back(Error("All 'level' fields in '{{" + key + "}}' must be either"
 						" 'readonly' or 'full'"));
@@ -185,26 +188,26 @@ validateAuthorizationsField(const string &key, const ConfigKit::Store &config,
  * For example it ensures that, if the "level" field does
  * not exist, it is inserted with the default value.
  */
-inline Json::Value
-normalizeApiAccountJson(const Json::Value &json) {
-	if (json.isString()) {
-		return parseApiAccountDescription(json.asString());
+inline json::value
+normalizeApiAccountJson(const json::value &json) {
+	if (json.is_string()) {
+		return parseApiAccountDescription(json.as_string());
 	} else {
-		Json::Value doc = json;
-		if (json.isMember("password_file")) {
-			doc["password_file"] = absolutizePath(json["password_file"].asString());
+		json::object doc = json.get_object();
+		if (doc.contains("password_file")) {
+			doc["password_file"] = absolutizePath(doc["password_file"].as_string());
 		}
-		if (!json.isMember("level")) {
+		if (!doc.contains("level")) {
 			doc["level"] = "full";
 		}
 		return doc;
 	}
 }
 
-inline Json::Value
-normalizeApiAccountsJson(const Json::Value &json) {
-	Json::Value doc = json;
-	Json::Value::iterator it, end = doc.end();
+inline json::value
+normalizeApiAccountsJson(const json::value &json) {
+	json::array doc = json.get_array();
+	json::array::iterator it, end = doc.end();
 	for (it = doc.begin(); it != end; it++) {
 		*it = normalizeApiAccountJson(*it);
 	}
@@ -217,9 +220,9 @@ normalizeApiAccountsJson(const Json::Value &json) {
  *
  * @throws ArgumentException One of the input arguments contains a disallowed value.
  */
-inline Json::Value
+inline json::value
 parseApiAccountDescription(const StaticString &description) {
-	Json::Value json;
+	json::object json;
 	vector<StaticString> args;
 
 	split(description, ':', args);
@@ -240,7 +243,7 @@ parseApiAccountDescription(const StaticString &description) {
 		throw ArgumentException(string());
 	}
 
-	if (OXT_UNLIKELY(json["username"].asString() == "api")) {
+	if (OXT_UNLIKELY(json["username"].as_string() == "api")) {
 		throw ArgumentException("the username 'api' is not allowed");
 	}
 
@@ -257,14 +260,15 @@ struct ApiAccount {
 	 *
 	 * @params doc An *normalized* authorization JSON object.
 	 */
-	ApiAccount(const Json::Value &doc) {
-		username = doc["username"].asString();
-		if (doc.isMember("password")) {
-			password = doc["password"].asString();
+	ApiAccount(const json::value &vdoc) {
+		const json::object &doc = vdoc.get_object();
+		username = getJsonStringField(doc,"username");
+		if (doc.contains("password")) {
+			password = getJsonStringField(doc,"password");
 		} else {
-			password = strip(unsafeReadFile(doc["password_file"].asString()));
+			password = strip(unsafeReadFile(getJsonStringField(doc,"password_file")));
 		}
-		readonly = doc["level"].asString() == "readonly";
+		readonly = doc.at("level").as_string() == "readonly";
 	}
 };
 
@@ -280,12 +284,13 @@ public:
 	 *
 	 * @param authorizations A *normalized* JSON array of authorization objects.
 	 */
-	ApiAccountDatabase(const Json::Value &authorizations) {
+	ApiAccountDatabase(const json::value &vauthorizations) {
+		const json::array &authorizations = vauthorizations.get_array();
 		database.reserve(authorizations.size());
 
-		Json::Value::const_iterator it, end = authorizations.end();
+		json::array::const_iterator it, end = authorizations.end();
 		for (it = authorizations.begin(); it != end; it++) {
-			const Json::Value &auth = *it;
+			const json::value &auth = *it;
 			database.push_back(ApiAccount(auth));
 		}
 	}

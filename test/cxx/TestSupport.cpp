@@ -11,13 +11,13 @@
 #include <FileTools/FileManip.h>
 #include <SystemTools/UserDatabase.h>
 #include <Utils/ScopeGuard.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 namespace TestSupport {
 
 LoggingKit::Level defaultLogLevel = (LoggingKit::Level) DEFAULT_LOG_LEVEL;
 ResourceLocator *resourceLocator = NULL;
-Json::Value testConfig;
+json::value testConfig;
 
 
 void

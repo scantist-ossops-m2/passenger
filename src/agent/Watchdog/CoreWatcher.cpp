@@ -53,12 +53,12 @@ protected:
 	}
 
 	virtual void sendStartupArguments(pid_t pid, FileDescriptor &fd) {
-		Json::Value config = watchdogSchema->core.translator.translate(
+		json::object config = watchdogSchema->core.translator.translate(
 			watchdogConfig->inspectEffectiveValues());
 
-		Json::Value::iterator it, end = wo->extraConfigToPassToSubAgents.end();
+		json::object::iterator it, end = wo->extraConfigToPassToSubAgents.end();
 		for (it = wo->extraConfigToPassToSubAgents.begin(); it != end; it++) {
-			config[it.name()] = *it;
+			config[it->key()] = it->value();
 		}
 
 		config["pid_file"] = wo->corePidFile;
@@ -68,12 +68,12 @@ protected:
 		config["api_server_authorizations"] = wo->coreApiServerAuthorizations;
 
 		// The special value "-" means "don't set a controller secure headers password".
-		if (config["controller_secure_headers_password"].asString() == "-") {
-			config.removeMember("controller_secure_headers_password");
+		if (config["controller_secure_headers_password"].as_string() == "-") {
+			config.erase("controller_secure_headers_password");
 		}
 
 		ConfigKit::Store filteredConfig(watchdogSchema->core.schema, config);
-		writeScalarMessage(fd, filteredConfig.inspectEffectiveValues().toStyledString());
+		writeScalarMessage(fd, json::serialize(filteredConfig.inspectEffectiveValues()));
 	}
 
 	virtual bool processStartupInfo(pid_t pid, FileDescriptor &fd, const vector<string> &args) {
@@ -88,8 +88,8 @@ public:
 			resourceLocator->findSupportBinary(AGENT_EXE);
 	}
 
-	virtual void reportAgentStartupResult(Json::Value &report) {
-		report["core_address"] = wo->controllerAddresses[0].asString();
-		report["core_password"] = watchdogConfig->get("controller_secure_headers_password").asString();
+	virtual void reportAgentStartupResult(json::object &report) {
+		report["core_address"] = wo->controllerAddresses[0].as_string();
+		report["core_password"] = watchdogConfig->get("controller_secure_headers_password").as_string();
 	}
 };

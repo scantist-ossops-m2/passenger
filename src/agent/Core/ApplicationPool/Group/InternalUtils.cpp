@@ -23,7 +23,9 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  *  THE SOFTWARE.
  */
+#include <JsonTools/JsonUtils.h>
 #include <Core/ApplicationPool/Group.h>
+#include <Core/ApplicationPool/Pool.h>
 
 /*************************************************************************
  *
@@ -99,13 +101,13 @@ bool
 Group::prepareHookScriptOptions(HookScriptOptions &hsOptions, const char *name) {
 	Context *context = getPool()->getContext();
 	LockGuard l(context->agentConfigSyncher);
-	if (context->agentConfig.isNull()) {
+	if (context->agentConfig.is_null()) {
 		return false;
 	}
 
 	hsOptions.name = name;
 	string hookName = string("hook_") + name;
-	hsOptions.spec = context->agentConfig.get(hookName, Json::Value()).asString();
+	hsOptions.spec = getJsonStringField(context->agentConfig,hookName.c_str());
 
 	return true;
 }
@@ -166,13 +168,13 @@ Group::createNullProcessObject() {
 		}
 	};
 
-	Json::Value args;
+	json::object args;
 	args["pid"] = 0;
 	args["gupid"] = "0";
 	args["spawner_creation_time"] = 0;
 	args["spawn_start_time"] = 0;
 	args["dummy"] = true;
-	args["sockets"] = Json::Value(Json::arrayValue);
+	args["sockets"] = json::array();
 
 	Context *context = getContext();
 	LockGuard l(context->memoryManagementSyncher);
@@ -208,8 +210,8 @@ Group::createProcessObject(const SpawningKit::Spawner &spawner,
 		}
 	};
 
-	Json::Value args;
-	args["spawner_creation_time"] = (Json::UInt64) spawner.creationTime;
+	json::object args;
+	args["spawner_creation_time"] = (uint64_t) spawner.creationTime;
 
 	Context *context = getContext();
 	LockGuard l(context->memoryManagementSyncher);

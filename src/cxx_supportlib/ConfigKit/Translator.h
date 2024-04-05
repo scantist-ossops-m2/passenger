@@ -31,13 +31,13 @@
 #include <vector>
 #include <ConfigKit/Common.h>
 #include <StaticString.h>
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 namespace Passenger {
 namespace ConfigKit {
 
 using namespace std;
-
+namespace json = boost::json;
 
 /**
  * An abstract base class for all translators.
@@ -58,27 +58,25 @@ private:
 public:
 	virtual ~Translator() { }
 
-	virtual Json::Value translate(const Json::Value &doc) const {
-		Json::Value result(Json::objectValue);
-		Json::Value::const_iterator it, end = doc.end();
+	virtual json::object translate(const json::object &doc) const {
+		json::object result;
+		json::object::const_iterator it, end = doc.end();
 
 		for (it = doc.begin(); it != end; it++) {
-			const char *keyEnd;
-			const char *key = it.memberName(&keyEnd);
-			result[translateOne(StaticString(key, keyEnd - key))] = *it;
+			const json::string_view key = it->key();
+			result[translateOne(StaticString(key.data(), key.size()))] = it->value();
 		}
 
 		return result;
 	}
 
-	virtual Json::Value reverseTranslate(const Json::Value &doc) const {
-		Json::Value result(Json::objectValue);
-		Json::Value::const_iterator it, end = doc.end();
+	virtual json::object reverseTranslate(const json::object &doc) const {
+		json::object result;
+		json::object::const_iterator it, end = doc.end();
 
 		for (it = doc.begin(); it != end; it++) {
-			const char *keyEnd;
-			const char *key = it.memberName(&keyEnd);
-			result[reverseTranslateOne(StaticString(key, keyEnd - key))] = *it;
+			const json::string_view key = it->key();
+			result[reverseTranslateOne(StaticString(key.data(), key.size()))] = it->value();
 		}
 
 		return result;

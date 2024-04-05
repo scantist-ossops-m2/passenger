@@ -30,6 +30,7 @@
 	#include <selinux/selinux.h>
 #endif
 
+#include <boost/json.hpp>
 #include <boost/shared_ptr.hpp>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -47,7 +48,6 @@
 #include <StrIntTools/StrIntUtils.h>
 #include <IOTools/IOUtils.h>
 #include <SystemTools/SystemTime.h>
-#include <jsoncpp/json.h>
 
 namespace Passenger {
 
@@ -62,7 +62,7 @@ public:
 		bool userSwitching;
 		uid_t defaultUid;
 		gid_t defaultGid;
-		Json::Value properties;
+		json::value properties;
 
 		CreationOptions()
 			: prefix("passenger"),
@@ -219,23 +219,25 @@ private:
 	}
 
 	void createPropertyFile(const CreationOptions &options) {
-		Json::Value props;
+		json::object props;
 
-		props["instance_dir"]["major_version"] = SERVER_INSTANCE_DIR_STRUCTURE_MAJOR_VERSION;
-		props["instance_dir"]["minor_version"] = SERVER_INSTANCE_DIR_STRUCTURE_MINOR_VERSION;
-		props["instance_dir"]["created_at"] = (Json::Int64) time(NULL);
-		props["instance_dir"]["created_at_monotonic_usec"] = (Json::UInt64) SystemTime::getMonotonicUsec();
+		props["instance_dir"] = json::object();
+		json::object &instance_dir = props["instance_dir"].get_object();
+		instance_dir["major_version"] = SERVER_INSTANCE_DIR_STRUCTURE_MAJOR_VERSION;
+		instance_dir["minor_version"] = SERVER_INSTANCE_DIR_STRUCTURE_MINOR_VERSION;
+		instance_dir["created_at"] = (int64_t) time(NULL);
+		instance_dir["created_at_monotonic_usec"] = (uint64_t) SystemTime::getMonotonicUsec();
 		props["passenger_version"] = PASSENGER_VERSION;
-		props["watchdog_pid"] = (Json::UInt64) getpid();
+		props["watchdog_pid"] = (uint64_t) getpid();
 		props["instance_id"] = generateInstanceId();
 
-		Json::Value::Members members = options.properties.getMemberNames();
-		Json::Value::Members::const_iterator it, end = members.end();
+		const json::object &members = options.properties.get_object();
+		json::object::const_iterator it, end = members.end();
 		for (it = members.begin(); it != end; it++) {
-			props[*it] = options.properties.get(*it, Json::Value());
+			props[it->key()] = it->value();
 		}
 
-		createFile(path + "/properties.json", props.toStyledString());
+		createFile(path + "/properties.json", json::serialize(props));
 	}
 
 	void createLockFile() {

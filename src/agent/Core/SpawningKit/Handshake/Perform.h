@@ -29,6 +29,7 @@
 #include <boost/thread.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/bind/bind.hpp>
+#include <boost/json.hpp>
 #include <oxt/thread.hpp>
 #include <oxt/system_calls.hpp>
 #include <oxt/backtrace.hpp>
@@ -43,8 +44,6 @@
 #include <sys/types.h>
 #include <dirent.h>
 
-#include <jsoncpp/json.h>
-
 #include <Constants.h>
 #include <Exceptions.h>
 #include <FileDescriptor.h>
@@ -54,6 +53,7 @@
 #include <Utils/ScopeGuard.h>
 #include <SystemTools/SystemTime.h>
 #include <StrIntTools/StrIntUtils.h>
+#include <JsonTools/JsonUtils.h>
 #include <Core/SpawningKit/Config.h>
 #include <Core/SpawningKit/Exceptions.h>
 #include <Core/SpawningKit/Handshake/BackgroundIOCapturer.h>
@@ -378,9 +378,9 @@ private:
 		TRACE_POINT();
 		Result &result = session.result;
 		string path = session.responseDir + "/properties.json";
-		Json::Reader reader;
-		Json::Value doc;
+		json::value vdoc;
 		vector<string> errors;
+		error_code ec;
 
 		// We already checked whether properties.json exists before invoking
 		// this method, so if safeReadFile() fails then we can't be sure that
@@ -398,114 +398,118 @@ private:
 			throwSpawnExceptionBecauseOfResultValidationErrors(vector<string>(),
 				errors);
 		}
-		if (!reader.parse(jsonContent.first, doc)) {
+		vdoc = json::parse(jsonContent.first, ec);
+		if (ec) {
 			errors.push_back("Error parsing " + path + ": " +
-				reader.getFormattedErrorMessages());
+				ec.message());
 			throwSpawnExceptionBecauseOfResultValidationErrors(vector<string>(),
 				errors);
 		}
 
 		UPDATE_TRACE_POINT();
-		validateResultPropertiesFile(doc, socketsRequired, errors);
+		validateResultPropertiesFile(vdoc, socketsRequired, errors);
 		if (!errors.empty()) {
 			errors.insert(errors.begin(), "The following errors were detected in "
 				+ path + ":");
 			throwSpawnExceptionBecauseOfResultValidationErrors(vector<string>(),
 				errors);
 		}
-
-		if (!socketsRequired && (!doc.isMember("sockets") || doc["sockets"].empty())) {
+		json::object &doc = vdoc.get_object();
+		if (!socketsRequired && (!doc.contains("sockets") || !doc["sockets"].is_array() || doc["sockets"].get_array().empty())) {
 			return;
 		}
 
 		UPDATE_TRACE_POINT();
-		Json::Value::iterator it, end = doc["sockets"].end();
-		for (it = doc["sockets"].begin(); it != end; it++) {
-			const Json::Value &socketDoc = *it;
+		json::array::iterator it, end = doc["sockets"].get_array().end();
+		for (it = doc["sockets"].get_array().begin(); it != end; it++) {
+			const json::object &socketDoc = it->get_object();
 			result.sockets.push_back(Result::Socket());
 			Result::Socket &socket = result.sockets.back();
 
-			socket.address = socketDoc["address"].asString();
-			socket.protocol = socketDoc["protocol"].asString();
-			socket.concurrency = socketDoc["concurrency"].asInt();
-			if (socketDoc.isMember("accept_http_requests")) {
-				socket.acceptHttpRequests = socketDoc["accept_http_requests"].asBool();
+			socket.address = getJsonStringField(socketDoc,"address");
+			socket.protocol = getJsonStringField(socketDoc,"protocol");
+			socket.concurrency = socketDoc.at("concurrency").as_int64();
+			if (socketDoc.contains("accept_http_requests")) {
+				socket.acceptHttpRequests = socketDoc.at("accept_http_requests").as_bool();
 			}
-			if (socketDoc.isMember("description")) {
-				socket.description = socketDoc["description"].asString();
+			if (socketDoc.contains("description")) {
+				socket.description = getJsonStringField(socketDoc,"description");
 			}
 		}
 	}
 
-	void validateResultPropertiesFile(const Json::Value &doc, bool socketsRequired,
+	void validateResultPropertiesFile(const json::value &vdoc, bool socketsRequired,
 		vector<string> &errors) const
 	{
 		TRACE_POINT();
-		if (!doc.isMember("sockets")) {
+		const json::object &doc = vdoc.get_object();
+		if (!doc.contains("sockets")) {
 			if (socketsRequired) {
 				errors.push_back("'sockets' must be specified");
 			}
 			return;
 		}
-		if (!doc["sockets"].isArray()) {
+		if (!doc.at("sockets").is_array()) {
 			errors.push_back("'sockets' must be an array");
 			return;
 		}
-		if (socketsRequired && doc["sockets"].empty()) {
+		const json::array &sockets = doc.at("sockets").get_array();
+		if (socketsRequired && sockets.empty()) {
 			errors.push_back("'sockets' must be non-empty");
 			return;
 		}
 
 		UPDATE_TRACE_POINT();
-		Json::Value::const_iterator it, end = doc["sockets"].end();
-		for (it = doc["sockets"].begin(); it != end; it++) {
-			const Json::Value &socketDoc = *it;
-
-			if (!socketDoc.isObject()) {
-				errors.push_back("'sockets[" + toString(it.index())
+		json::array::const_iterator it, end = sockets.end(), begin = sockets.begin();
+		for (it = begin; it != end; it++) {
+			const json::value &socketDoc = *it;
+			ptrdiff_t index = it - begin;
+			if (!socketDoc.is_object()) {
+				errors.push_back("'sockets[" + toString(index)
 					+ "]' must be an object");
 				continue;
 			}
 
 			validateResultPropertiesFileSocketField(socketDoc,
-				"address", Json::stringValue, it.index(),
+				"address", json::kind::string, index,
 				true, true, errors);
 			validateResultPropertiesFileSocketField(socketDoc,
-				"protocol", Json::stringValue, it.index(),
+				"protocol", json::kind::string, index,
 				true, true, errors);
 			validateResultPropertiesFileSocketField(socketDoc,
-				"description", Json::stringValue, it.index(),
+				"description", json::kind::string, index,
 				false, true, errors);
 			validateResultPropertiesFileSocketField(socketDoc,
-				"concurrency", Json::intValue, it.index(),
+				"concurrency", json::kind::int64, index,
 				true, false, errors);
 			validateResultPropertiesFileSocketField(socketDoc,
-				"accept_http_requests", Json::booleanValue, it.index(),
+				"accept_http_requests", json::kind::bool_, index,
 				false, false, errors);
 			validateResultPropertiesFileSocketAddress(socketDoc,
-				it.index(), errors);
+				index, errors);
 		}
 	}
 
-	void validateResultPropertiesFileSocketField(const Json::Value &doc,
-		const char *key, Json::ValueType type, unsigned int index, bool required,
+	void validateResultPropertiesFileSocketField(const json::value &vdoc,
+		const char *key, json::kind type, unsigned int index, bool required,
 		bool requireNonEmpty, vector<string> &errors) const
 	{
-		if (!doc.isMember(key)) {
+		const json::object &doc = vdoc.get_object();
+		if (!doc.contains(key)) {
 			if (required) {
 				errors.push_back("'sockets[" + toString(index)
 					+ "]." + key + "' must be specified");
 			}
-		} else if (doc[key].type() != type) {
+		} else if (doc.at(key).kind() != type) {
 			const char *typeDesc;
 			switch (type) {
-			case Json::stringValue:
+			case json::kind::string:
 				typeDesc = "a string";
 				break;
-			case Json::intValue:
+			case json::kind::int64:
 				typeDesc = "an integer";
 				break;
-			case Json::booleanValue:
+			case json::kind::bool_:
 				typeDesc = "a boolean";
 				break;
 			default:
@@ -514,23 +518,24 @@ private:
 			}
 			errors.push_back("'sockets[" + toString(index)
 				+ "]." + key + "' must be " + typeDesc);
-		} else if (requireNonEmpty && doc[key].asString().empty()) {
+		} else if (requireNonEmpty && doc.at(key).as_string().empty()) {
 			errors.push_back("'sockets[" + toString(index)
 				+ "]." + key + "' must be non-empty");
 		}
 	}
 
-	void validateResultPropertiesFileSocketAddress(const Json::Value &doc,
+	void validateResultPropertiesFileSocketAddress(const json::value &vdoc,
 		unsigned int index, vector<string> &errors) const
 	{
 		TRACE_POINT();
-		if (!doc["address"].isString()
-		 || getSocketAddressType(doc["address"].asString()) != SAT_UNIX)
+		const json::object &doc = vdoc.get_object();
+		if (!doc.at("address").is_string()
+			|| getSocketAddressType(getJsonStaticStringField(doc,"address")) != SAT_UNIX)
 		{
 			return;
 		}
 
-		string filename = parseUnixSocketAddress(doc["address"].asString());
+		string filename = parseUnixSocketAddress(getJsonStaticStringField(doc,"address"));
 
 		if (filename.empty()) {
 			errors.push_back("'sockets[" + toString(index)

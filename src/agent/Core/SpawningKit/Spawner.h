@@ -37,6 +37,7 @@
 #include <Core/SpawningKit/Context.h>
 #include <Core/SpawningKit/Result.h>
 #include <Core/SpawningKit/UserSwitchingRules.h>
+#include <Core/ApplicationPool/Options.h>
 
 namespace Passenger {
 namespace SpawningKit {
@@ -77,7 +78,7 @@ private:
 protected:
 	Context *context;
 
-	void setConfigFromAppPoolOptions(Config *config, Json::Value &extraArgs,
+	void setConfigFromAppPoolOptions(Config *config, json::value &extraArgs,
 		const AppPoolOptions &options)
 	{
 		TRACE_POINT();
@@ -135,7 +136,7 @@ protected:
 		config->user = info.username;
 		config->group = info.groupname;
 
-		extraArgs["spawn_method"] = options.spawnMethod.toString();
+		extraArgs.get_object()["spawn_method"] = options.spawnMethod.toString();
 		config->bindAddress = options.bindAddress;
 
 		/******************/

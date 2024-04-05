@@ -10,7 +10,7 @@ namespace tut {
 	struct ConfigKit_StoreTest: public TestBase {
 		ConfigKit::Schema schema;
 		ConfigKit::Store *config;
-		Json::Value doc;
+		json::value doc;
 		vector<ConfigKit::Error> errors;
 
 		ConfigKit_StoreTest() {
@@ -53,7 +53,7 @@ namespace tut {
 		set_test_name("Validating a non-object update set");
 
 		init();
-		doc = Json::Value("hello");
+		doc = json::value("hello");
 		config->previewUpdate(doc, errors);
 		ensure_equals(errors.size(), 1u);
 		ensure_equals(errors[0].getMessage(), "The JSON document must be an object");
@@ -123,7 +123,7 @@ namespace tut {
 		doc["baz"] = true;
 		doc["secret"] = "my secret";
 
-		Json::Value preview = config->previewUpdate(doc, errors);
+		json::value preview = config->previewUpdate(doc, errors);
 		ensure_equals("1 error", errors.size(), 1u);
 		ensure_equals(errors[0].getMessage(), "'bar' is required");
 		ensure("foo exists", preview.isMember("foo"));
@@ -170,7 +170,7 @@ namespace tut {
 		ensure("update succeeds", config->update(doc, errors));
 		ensure("no errors", errors.empty());
 
-		Json::Value dump = config->inspect();
+		json::value dump = config->inspect();
 		ensure_equals("foo user value", dump["foo"]["user_value"].asString(), "string");
 		ensure_equals("foo effective value", dump["foo"]["effective_value"].asString(), "string");
 		ensure_equals("bar user value", dump["bar"]["user_value"].asInt(), 123);
@@ -208,7 +208,7 @@ namespace tut {
 		ensure_equals(config->get("foo").asString(), "string");
 		ensure_equals(config->get("bar").asInt(), 123);
 
-		Json::Value dump = config->inspect();
+		json::value dump = config->inspect();
 		ensure("foo user value", dump["foo"]["user_value"].isNull());
 		ensure_equals("foo default value", dump["foo"]["default_value"].asString(), "string");
 		ensure_equals("foo effective value", dump["foo"]["effective_value"].asString(), "string");
@@ -217,7 +217,7 @@ namespace tut {
 		ensure_equals("bar effective value", dump["bar"]["effective_value"].asInt(), 123);
 	}
 
-	static Json::Value
+	static json::value
 	getNextValueAndBump(unsigned int *nextValue) {
 		unsigned int result = *nextValue;
 		(*nextValue)++;
@@ -259,8 +259,8 @@ namespace tut {
 		ensure(config->get("foo2").isNull());
 	}
 
-	static Json::Value normalizeTargetAndLevel(const Json::Value &values) {
-		Json::Value updates(Json::objectValue);
+	static json::value normalizeTargetAndLevel(const json::value &values) {
+		json::value updates(json::object);
 
 		if (values["target"].isString()) {
 			updates["target"]["path"] = values["target"];
@@ -292,7 +292,7 @@ namespace tut {
 		ensure_equals("(6)", config->get("level").asString(), "L1");
 		ensure_equals("(7)", doc["level"]["user_value"].asString(), "L1");
 
-		doc = Json::objectValue;
+		doc = json::object;
 		doc["level"] = "2";
 		ensure("(10)", config->update(doc, errors));
 		doc = config->inspect();
@@ -324,10 +324,10 @@ namespace tut {
 		doc["float"] = 123;
 		doc["bool"] = 1;
 		doc["array"] = Json::arrayValue;
-		doc["object"] = Json::objectValue;
-		doc["any"] = Json::objectValue;
+		doc["object"] = json::object;
+		doc["any"] = json::object;
 
-		Json::Value preview = config->previewUpdate(doc, errors);
+		json::value preview = config->previewUpdate(doc, errors);
 		ensure_equals("Validation passes (1)", errors.size(), 0u);
 		ensure("Validation passes", config->update(doc, errors));
 
@@ -362,7 +362,7 @@ namespace tut {
 		ensure_equals(config->get("bool").asBool(), true);
 	}
 
-	static Json::Value addExclamationFilter(const Json::Value &val) {
+	static json::value addExclamationFilter(const json::value &val) {
 		return val.asString() + "!";
 	}
 
@@ -382,7 +382,7 @@ namespace tut {
 		ensure_equals("(4)", doc["foo"]["effective_value"].asString(), "hello!");
 	}
 
-	static Json::Value getTest20Default(const ConfigKit::Store &store) {
+	static json::value getTest20Default(const ConfigKit::Store &store) {
 		return store["a1"].asInt() +
 			store["a2"].asInt() +
 			store["a4"].asInt() +

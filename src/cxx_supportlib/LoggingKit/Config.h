@@ -36,7 +36,7 @@
 #include <LoggingKit/Forward.h>
 #include <ConfigKit/Schema.h>
 
-#include <jsoncpp/json.h>
+#include <boost/json.hpp>
 
 namespace Passenger {
 namespace LoggingKit {
@@ -61,7 +61,7 @@ using namespace std;
  */
 class Schema: public ConfigKit::Schema {
 private:
-	static Json::Value createStderrTarget();
+	static json::value createStderrTarget();
 	static void validateLogLevel(const string &key, const ConfigKit::Store &store,
 		vector<ConfigKit::Error> &errors);
 	static void validateTarget(const string &key, const ConfigKit::Store &store,

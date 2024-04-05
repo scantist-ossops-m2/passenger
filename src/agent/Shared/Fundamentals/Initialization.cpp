@@ -53,7 +53,7 @@
 #include <StrIntTools/StrIntUtils.h>
 #include <IOTools/MessageIO.h>
 #include <SystemTools/SystemTime.h>
-
+#include <JsonTools/JsonUtils.h>
 
 namespace Passenger {
 namespace Agent {
@@ -415,14 +415,14 @@ extraArgumentsPassed(int argc, char *argv[], int argStartIndex) {
 
 static void
 parseAndCommitConfig(ConfigKit::Store &config, const StaticString &jsonData) {
-	Json::Reader reader;
-	Json::Value doc;
+	error_code ec;
+	json::value doc = json::parse(jsonData, ec);
 
 	if (getEnvBool("PASSENGER_DEBUG_INITIAL_CONFIG", false)) {
 		P_NOTICE("Initial raw configuration: " << jsonData);
 	}
 
-	if (reader.parse(jsonData, doc)) {
+	if (!ec) {
 		vector<ConfigKit::Error> errors;
 		if (!config.update(doc, errors)) {
 			vector<ConfigKit::Error>::const_iterator it, end = errors.end();
@@ -430,12 +430,12 @@ parseAndCommitConfig(ConfigKit::Store &config, const StaticString &jsonData) {
 			for (it = errors.begin(); it != end; it++) {
 				fprintf(stderr, "- %s\n", it->getMessage().c_str());
 			}
-			fprintf(stderr, "Raw configuration: %s\n", doc.toStyledString().c_str());
+			fprintf(stderr, "Raw configuration: %s\n", json::serialize(doc).c_str());
 			exit(1);
 		}
 	} else {
 		fprintf(stderr, "ERROR: JSON configuration parse error: %s\n",
-			reader.getFormattedErrorMessages().c_str());
+			ec.message().c_str());
 		fprintf(stderr, "Raw JSON data: %s\n", jsonData.toString().c_str());
 		exit(1);
 	}
@@ -484,14 +484,16 @@ initializeLoggingKit(const char *processName, ConfigKit::Store &config,
 	const ConfigKit::Translator &loggingKitTranslator,
 	const LoggingKitPreInitFunc &loggingKitPreInitFunc)
 {
-	Json::Value initialConfig = config.inspectEffectiveValues();
+	json::value initialConfig = config.inspectEffectiveValues();
 	if (loggingKitPreInitFunc != NULL) {
 		loggingKitPreInitFunc(initialConfig);
 	}
 	LoggingKit::initialize(initialConfig, loggingKitTranslator);
-	Json::Value dump = LoggingKit::context->inspectConfig();
+	json::value dump = LoggingKit::context->inspectConfig();
 
-	if (!dump["file_descriptor_log_target"]["effective_value"].isNull()) {
+	error_code ec;
+	const json::value* e_value = dump.find_pointer("/file_descriptor_log_target/effective_value",ec);
+	if (!ec) {
 		// This information helps ./dev/parse_file_descriptor_log.
 		FastStringStream<> stream;
 		LoggingKit::_prepareLogEntry(stream, LoggingKit::CRIT, __FILE__, __LINE__);
@@ -503,7 +505,7 @@ initializeLoggingKit(const char *processName, ConfigKit::Store &config,
 			LoggingKit::context->getConfigRealization()->fileDescriptorLogTargetFd,
 			__FILE__, __LINE__,
 			"file descriptor log file "
-			<< dump["file_descriptor_log_target"]["effective_value"]["path"].asString());
+			<< getJsonStringField(*e_value,"path"));
 	} else {
 		// This information helps ./dev/parse_file_descriptor_log.
 		P_DEBUG("Starting agent: " << processName);
@@ -541,12 +543,12 @@ changeProcessTitle(int argc, char **argv[], const char *processName) {
 
 static string
 dumpConfigForDebugging(const ConfigKit::Store &config) {
-	Json::Value result = config.inspectEffectiveValues();
-	if (!result["config_manifest"].isNull()) {
+	json::object result = config.inspectEffectiveValues();
+	if (result.contains("config_manifest")) {
 		// The config manifest is too large so we omit it from the debug output.
 		result["config_manifest"] = "[OMITTED]";
 	}
-	return result.toStyledString();
+	return json::serialize(result);
 }
 
 void
@@ -593,10 +595,10 @@ initializeAgent(int argc, char **argv[], const char *processName,
 			readConfigFromJsonPassedToArgs(argc, argv, argStartIndex, config);
 		}
 
-		if (!config["passenger_root"].isNull()) {
-			context->resourceLocator = new ResourceLocator(config["passenger_root"].asString());
+		if (!config["passenger_root"].is_null()) {
+			context->resourceLocator = new ResourceLocator(jsonValueToString(config["passenger_root"]));
 			if (abortHandlerInstalled()) {
-				string defaultRuby = config["default_ruby"].asString();
+				json::string defaultRuby = config["default_ruby"].get_string();
 				if (defaultRuby.empty()) {
 					defaultRuby = DEFAULT_RUBY;
 				}
